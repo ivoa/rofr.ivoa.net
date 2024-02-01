@@ -3,7 +3,7 @@
 # intended as replacement for listSearchables.py
 
 import sys
-import urllib2
+import urllib2,urllib
 
 import cgi, cgitb
 
@@ -12,13 +12,19 @@ embedded = form.getvalue('embedded')
 
 sys.stdout.write("Content-type: text/html\n\n")
 
-# query="select distinct r.ivoid, r.res_type, r.res_title, r.reference_url, c.ivoid, c.cap_type, c.standard_id, i.intf_type, i.url_use, i.access_url from rr.capability c, rr.resource r, rr.interface i where c.ivoid = r.ivoid and c.ivoid = i.ivoid and (c.cap_type like '%search%' or (c.cap_type like '%capability%' and c.standard_id like '%ivoa.net/std/tap%' and r.ivoid != 'ivo://archive.stsci.edu/nvoregistry')) and (i.intf_type like '%paramhttp%' or (i.intf_type like '%webservice%' and i.url_use = 'full')) and r.res_type = 'vg:registry'"
-
-query="select%20distinct%20r.ivoid,%20r.res_type,%20r.res_title,%20r.reference_url,%20c.ivoid,%20c.cap_type,%20c.standard_id,%20i.intf_type,%20i.url_use,%20i.access_url%20from%20rr.capability%20c,%20rr.resource%20r,%20rr.interface%20i%20where%20c.ivoid%20=%20r.ivoid%20and%20c.ivoid%20=%20i.ivoid%20and%20(c.cap_type%20like%20%27%25search%25%27%20or%20(c.cap_type%20like%20%27%25capability%25%27%20and%20c.standard_id%20like%20%27%25ivoa.net/std/tap%25%27%20and%20r.ivoid%20!=%20%27ivo://archive.stsci.edu/nvoregistry%27))%20and%20(i.intf_type%20like%20%27%25paramhttp%25%27%20or%20(i.intf_type%20like%20%27%25webservice%25%27%20and%20i.url_use%20=%20%27full%27))%20and%20r.res_type%20=%20%27vg:registry%27" 
+query = "select distinct r.ivoid, r.res_type, r.res_title, r.reference_url, c.ivoid, c.cap_type, c.standard_id, i.intf_type, i.url_use, i.access_url from rr.capability c, rr.resource r, rr.interface i where c.ivoid = r.ivoid and c.ivoid = i.ivoid and (c.cap_type like '%search%' or (c.cap_type like '%capability%' and c.standard_id like '%ivoa.net/std/tap%' and r.ivoid != 'ivo://archive.stsci.edu/nvoregistry')) and (i.intf_type like '%paramhttp%' or (i.intf_type like '%webservice%' and i.url_use = 'full')) and r.res_type = 'vg:registry'"
 # note vao.stsci.edu/RegTAP is presented with capabilities, availability, tables, but not other
 
-# req = urllib2.Request("http://vao.stsci.edu/regtap/tapservice.aspx/sync?format=csv&lang=adql&query=" + query)
-resp = urllib2.urlopen("http://vao.stsci.edu/regtap/tapservice.aspx/sync?format=csv&lang=adql&query=" + query)
+payload = urllib.urlencode({
+  'lang': 'adql',
+  'format': 'csv',
+  'query': query
+})
+
+method = "POST"
+url = "http://vao.stsci.edu/regtap/tapservice.aspx/sync"
+request = urllib2.Request(url, data=payload)
+resp = urllib2.urlopen(request)
 
 # ESO RegTAP  has in VAO RegTap ivo://esavo/registry/tap resource type catalogservice
 # but SOAP registry has this as resource of type registry with ivo://esavo/registry/tap
