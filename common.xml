@@ -12,6 +12,7 @@
   <property name="webapp.dir" value="${main.dir}/webapp"/>
   <property name="scripts.dir" value="${main.dir}/scripts"/>
   <property name="test.java.dir" value="${test.dir}/java"/>
+  <property name="test.resources.dir" value="${test.dir}/resources"/>
   <property name="target.dir" value="${basedir}/target"/>
   <property name="classes.dir" value="${target.dir}/classes"/>
   <property name="test.classes.dir" value="${target.dir}/test-classes"/>
@@ -83,10 +84,12 @@
              dir="${basedir}"
 	   haltonfailure="yes">
       <classpath>
-	<pathelement path="${classes.dir}"/>
-	<pathelement path="${test.classes.dir}"/>
-	<fileset dir="${lib.dir}/runtime"/>
-	<fileset dir="${lib.dir}/test"/>
+	    <pathelement path="${classes.dir}"/>
+	    <pathelement path="${test.classes.dir}"/>
+	    <fileset dir="${lib.dir}/runtime"/>
+        <fileset dir="${lib.dir}/test"/>
+        <pathelement path="${test.resources.dir}"/>
+        <pathelement path="${resources.dir}"/>
       </classpath>
       
       <formatter type="plain"/>

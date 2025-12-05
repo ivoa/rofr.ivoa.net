@@ -8,11 +8,9 @@ import org.nvo.service.validation.ProcessingException;
 import org.nvo.service.validation.ResultTypes;
 import net.ivoa.registry.validate.VOResourceValidater;
 
-import java.io.Reader;
 import java.io.FileReader;
 import java.io.File;
 import java.io.Writer;
-import java.io.PrintWriter;
 import java.io.OutputStreamWriter;
 import java.io.InputStream;
 import java.io.PrintStream;
@@ -20,14 +18,10 @@ import java.io.IOException;
 import java.io.FileNotFoundException;
 import java.util.Enumeration;
 
-import org.xml.sax.SAXParseException;
-import org.xml.sax.SAXException;
 import org.w3c.dom.Element;
 import org.w3c.dom.Document;
-import org.w3c.dom.DOMException;
 
-import javax.xml.parsers.DocumentBuilder; 
-import javax.xml.parsers.DocumentBuilderFactory; 
+import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException; 
 import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.Transformer;
@@ -43,9 +37,9 @@ import javax.xml.transform.stream.StreamResult;
  */
 public class ValidateVOResource {
 
-    VOResourceValidater validater = null;
-    DocumentBuilderFactory df = DocumentBuilderFactory.newInstance();
-    TransformerFactory tf = TransformerFactory.newInstance();
+    final VOResourceValidater validater;
+    final DocumentBuilderFactory df = DocumentBuilderFactory.newInstance();
+    final TransformerFactory tf = TransformerFactory.newInstance();
     String rootElementName = "ValidateVOResource";
 
     public static void main(String[] args) {
@@ -54,7 +48,7 @@ public class ValidateVOResource {
             cl.setCmdLine(args);
         }
         catch (CmdLine.UnrecognizedOptionException ex) {
-            System.err.println(ex);
+            ex.printStackTrace(System.err);
             usage(System.err);
             System.exit(2);
         }
@@ -65,8 +59,7 @@ public class ValidateVOResource {
         }
 
         SchemaLocation sl = null;
-        String ssheet = null, tssheet = null, relem = null, felem = null;
-        String fmtsheet = null;
+        String tssheet = null, relem = null, felem = null;
 
         if (cl.isSet('r')) relem = cl.getValue('r');
         if (cl.isSet('f')) felem = cl.getValue('f');
@@ -75,11 +68,6 @@ public class ValidateVOResource {
         if (cwd == null) 
             System.err.println("Warning: can't determine current directory!");
 
-        if (cl.isSet('X')) {
-            // stylesheet to apply to the XML results
-            File f = new File(cwd, cl.getValue('X'));
-            ssheet = f.getAbsolutePath();
-        }
         if (cl.isSet('t')) {
             // stylesheet containing extra tests
             File f = new File(cwd, cl.getValue('t'));
@@ -104,8 +92,7 @@ public class ValidateVOResource {
             }
         }
 
-        ValidateVOResource validater = new ValidateVOResource(sl, tssheet, 
-                                                              relem, felem);
+        ValidateVOResource validater = new ValidateVOResource(sl, tssheet, relem, felem);
 
         Writer out = null;
         if (! cl.isSet('q')) 
@@ -127,9 +114,9 @@ public class ValidateVOResource {
         }
 
         String[] files = new String[cl.getNumArgs()];
-        Enumeration e = cl.arguments();
+        Enumeration<String> e = cl.arguments();
         for(int i=0; i < files.length && e.hasMoreElements(); i++) 
-            files[i] = (String) e.nextElement();
+            files[i] = e.nextElement();
 
         try {
             if (cl.isSet('X')) {
@@ -144,9 +131,8 @@ public class ValidateVOResource {
         }
         catch (Exception ex) {
             System.err.println("Failed to validate: " + ex.getMessage());
-            ex.printStackTrace();
+            ex.printStackTrace(System.err);
         }
-
     }
 
     public static void usage(PrintStream out) {
@@ -234,25 +220,20 @@ public class ValidateVOResource {
         root.appendChild(results.createTextNode("\n"));
         // results.appendChild(results.createTextNode("\n"));
 
-        for(int i=0; i < files.length; i++) {
+        for (final String file : files) {
             try {
-                validater.validate(new FileReader(files[i]), root, files[i]);
+                validater.validate(new FileReader(file), root, file);
                 root.appendChild(results.createTextNode("\n"));
-            }
-            catch (FileNotFoundException ex) {
-                System.err.println(files[i] + ": file not found");
-            }
-            catch (IOException ex) {
-                System.err.println(files[i] + ": Read failure: " + 
-                                   ex.getMessage());
-            }
-            catch (TestingException ex) {
-                System.err.println(files[i] + ": Processing failure: " + 
-                                   ex.getMessage());
+            } catch (IOException ex) {
+                System.err.println(file + ": Read failure: " +
+                        ex.getMessage());
+            } catch (TestingException ex) {
+                System.err.println(file + ": Processing failure: " +
+                        ex.getMessage());
             }
         }
 
-        Transformer printer = null;
+        final Transformer printer;
         if (stylesheet != null) {
             try {
                 Templates ssheet = tf.newTemplates(new StreamSource(stylesheet));
@@ -308,7 +289,7 @@ public class ValidateVOResource {
             throw new FileNotFoundException("Can't locate stylesheet as " +
                                             "resource: " + ssfile);
 
-        Templates stylesheet = null;
+        final Templates stylesheet;
         try {
             stylesheet = tf.newTemplates(new StreamSource(ssheet));
         }
@@ -316,7 +297,7 @@ public class ValidateVOResource {
             throw new ConfigurationException("Failure loading testing " + 
                                              "stylesheet: " + ex.getMessage());
         }
-        for(int i=0; i < files.length; i++) {
+        for (String file : files) {
             try {
                 Document results = df.newDocumentBuilder().newDocument();
                 Element root = results.createElement(rootElementName);
@@ -324,36 +305,30 @@ public class ValidateVOResource {
                 root.appendChild(results.createTextNode("\n"));
                 // results.appendChild(results.createTextNode("\n"));
 
-                validater.validate(new FileReader(files[i]), root);
+                validater.validate(new FileReader(file), root);
                 root.appendChild(results.createTextNode("\n"));
-                
+
                 Transformer printer = stylesheet.newTransformer();
                 printer.transform(new DOMSource(results),
-                                  new StreamResult(out));
+                        new StreamResult(out));
                 out.flush();
-            }
-            catch (ParserConfigurationException ex) {
+            } catch (ParserConfigurationException ex) {
                 throw new ConfigurationException("Failure creating results " +
-                                                 "document: " + ex.getMessage());
-            }
-            catch (TransformerConfigurationException ex) {
+                        "document: " + ex.getMessage());
+            } catch (TransformerConfigurationException ex) {
                 throw new ConfigurationException("Failure reloading templates: "
-                                                 + ex.getMessage());
-            }
-            catch (TransformerException ex) {
-                System.err.println("Problem printing results for " + files[i] + 
-                                   ": " + ex.getMessage());
-            }
-            catch (FileNotFoundException ex) {
-                System.err.println(files[i] + ": file not found");
-            }
-            catch (IOException ex) {
-                System.err.println(files[i] + ": Write failure: " + 
-                                   ex.getMessage());
-            }
-            catch (TestingException ex) {
-                System.err.println(files[i] + ": Processing failure: " + 
-                                   ex.getMessage());
+                        + ex.getMessage());
+            } catch (TransformerException ex) {
+                System.err.println("Problem printing results for " + file +
+                        ": " + ex.getMessage());
+            } catch (FileNotFoundException ex) {
+                System.err.println(file + ": file not found");
+            } catch (IOException ex) {
+                System.err.println(file + ": Write failure: " +
+                        ex.getMessage());
+            } catch (TestingException ex) {
+                System.err.println(file + ": Processing failure: " +
+                        ex.getMessage());
             }
         }
 
@@ -365,7 +340,7 @@ public class ValidateVOResource {
      * usually) by default in the validation results.  
      * @param type   the type to include OR-ed together.  These are usually 
      *                 taken from the defined constants from 
-     *                 {@link org.nvo.service.validatoin.ResultType ResultType},
+     *                 {@link org.nvo.service.validation.ResultTypes ResultType},
      *                 but it can cover user-defined values.
      */
     public void addResultTypes(int type) {
@@ -377,7 +352,7 @@ public class ValidateVOResource {
      * usually) by default in the validation results.  
      * @param type   the types to include OR-ed together.  These are usually 
      *                 one of the defined constants from 
-     *                 {@link org.nvo.service.validatoin.ResultType ResultType},
+     *                 {@link org.nvo.service.validation.ResultTypes ResultType},
      *                 but it can cover user-defined values.
      */
     public void setResultTypes(int type) {

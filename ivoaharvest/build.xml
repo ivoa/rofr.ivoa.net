@@ -8,11 +8,30 @@
 
   <filter filtersfile="../deploy_env.properties"/>
 
-  <target name="test"
-	  description="Run unit tests"
-	  depends="test-compile">
-    <!-- Override as no-op for now -->
-  </target>
+    <target name="test"
+            description="Run unit tests"
+            depends="test-compile">
+        <junit printsummary="yes"
+               dir="${basedir}"
+               haltonfailure="yes">
+            <classpath>
+                <pathelement path="${classes.dir}"/>
+                <pathelement path="${test.classes.dir}"/>
+                <fileset dir="${lib.dir}/runtime"/>
+                <fileset dir="${lib.dir}/test"/>
+                <pathelement path="${test.resources.dir}"/>
+                <pathelement path="${resources.dir}"/>
+            </classpath>
+
+            <formatter type="plain"/>
+
+            <batchtest fork="yes" todir="${test.reports.dir}">
+                <fileset dir="${test.java.dir}">
+                    <exclude name="**/TestHarvestValidater.java"/>
+                </fileset>
+            </batchtest>
+        </junit>
+    </target>
 
   <target name="package"
 	  description="Package code for distribution"

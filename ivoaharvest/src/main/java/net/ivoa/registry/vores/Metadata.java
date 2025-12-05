@@ -13,9 +13,7 @@ import org.w3c.dom.NamedNodeMap;
 import java.util.Map;
 import java.util.HashMap;
 import java.util.List;
-import java.util.ListIterator;
 import java.util.LinkedList;
-import java.util.HashMap;
 import java.util.StringTokenizer;
 
 /**
@@ -32,9 +30,9 @@ import java.util.StringTokenizer;
 public class Metadata {
 
     // the delegate node
-    private Node del = null;
-    private String parentPath = null;
-    protected HashMap cache = new HashMap();
+    private final Node del;
+    private final String parentPath;
+    protected HashMap<String, String[]> cache = new HashMap<>();
 
     protected static final String XSI_NS = 
         "http://www.w3.org/2001/XMLSchema-instance";
@@ -68,7 +66,7 @@ public class Metadata {
      */
     public String getPathName() { return parentPath; }
 
-    class MatchedBlocks extends LinkedList<Metadata> {
+    static class MatchedBlocks extends LinkedList<Metadata> {
         public MatchedBlocks(Metadata first) {
             addLast(first);
         }
@@ -168,13 +166,7 @@ public class Metadata {
     public Metadata[] getBlocks(String path) 
          throws IllegalArgumentException 
     {
-        List matched = findBlocks(path);
-        Metadata[] out = new Metadata[matched.size()];
-        ListIterator iter = matched.listIterator();
-        for(int i=0; i < out.length && iter.hasNext(); i++) {
-            out[i] = (Metadata) iter.next();
-        }
-        return out;
+        return findBlocks(path).toArray(Metadata[]::new);
     }
 
     /**
@@ -191,29 +183,23 @@ public class Metadata {
      *             contains an "@" character
      */
     public String[] getParameters(String path) {
-        String[] out = (String[]) cache.get(path);
+        String[] out = cache.get(path);
         if (out != null) return out;
 
-        List matched = findBlocks(path);
+        List<Metadata> matched = findBlocks(path);
 
-        LinkedList values = new LinkedList();
-        ListIterator iter = matched.listIterator();
-        while(iter.hasNext()) {
-            Node node = ((Metadata) iter.next()).getDOMNode();
+        LinkedList<String> values = new LinkedList<>();
+        for (Metadata metadata : matched) {
+            Node node = metadata.getDOMNode();
             if (node.getNodeType() == Node.ATTRIBUTE_NODE) {
                 values.addLast(node.getNodeValue());
-            }
-            else if (node.getNodeType() == Node.ELEMENT_NODE) {
+            } else if (node.getNodeType() == Node.ELEMENT_NODE) {
                 String use = getElementValue(node);
                 if (use != null) values.addLast(use);
             }
         }
 
-        out = new String[values.size()];
-        iter = values.listIterator();
-        for(int i=0; i < out.length; i++) {
-            out[i] = (String) iter.next();
-        }
+        out = values.toArray(new String[0]);
         cache.put(path, out);
 
         return out;
@@ -273,7 +259,6 @@ public class Metadata {
     public String getXSIType() {
         if (del.getNodeType() != Node.ELEMENT_NODE) return null;
         String out = ((Element) del).getAttributeNS(XSI_NS, "type");
-        if (out == null) return null;
         int c = out.indexOf(":");
         if (c >= 0) out = out.substring(c+1);
         return out;
@@ -292,20 +277,19 @@ public class Metadata {
      * This common implementation is used by VOResource and Capability
      */
     static Map<String, Integer> getValidationLevels(Metadata node) {
-        List<Metadata> vls = node.findBlocks("validationLevel");
-        HashMap<String, Integer> out = new HashMap<String, Integer>(vls.size());
+        final List<Metadata> vls = node.findBlocks("validationLevel");
+        final Map<String, Integer> out = new HashMap<>(vls.size());
 
-        String who = null;
-        int level = -1;
-        for(Metadata md : vls) {
+        String who;
+        int level;
+        for (Metadata md : vls) {
           try {
             level = Integer.parseInt(md.getTrimmedElementValue(md.getDOMNode()));
             who = md.getParameter("validatedBy");
           }
-          catch (NumberFormatException ex) {  continue;  }
-          catch (NullPointerException ex) {   continue;  }
+          catch (NumberFormatException | NullPointerException ex) {  continue;  }
 
-          if (who != null) 
+            if (who != null)
               out.put(who, level);
         }
 
@@ -327,11 +311,12 @@ public class Metadata {
         try {
             for(Metadata md : vls) {
                 if (who.equals(md.getParameter("validatedBy"))) 
-                  return new Integer(md.getTrimmedElementValue(md.getDOMNode()));
+                  return Integer.parseInt(md.getTrimmedElementValue(md.getDOMNode()));
             }
         }
-        catch (NumberFormatException ex) {   }
-        catch (NullPointerException ex) {   }
+        catch (NumberFormatException | NullPointerException ex) {
+            // ignore invalid entries
+        }
 
         return null;
     }

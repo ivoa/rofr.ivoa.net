@@ -3,6 +3,7 @@ package net.ivoa.registry.validate;
 import ncsa.xml.validation.SchemaLocation;
 import ncsa.xml.validation.ValidationUtils;
 
+import org.nvo.service.validation.EvaluatorBase;
 import org.nvo.service.validation.XSLEvaluator;
 import org.nvo.service.validation.ParsingErrors;
 import org.nvo.service.validation.ResultTypes;
@@ -10,19 +11,14 @@ import org.nvo.service.validation.TemplateTestQuery;
 import org.nvo.service.validation.TestingException;
 import org.nvo.service.validation.TestingIOException;
 import org.nvo.service.validation.ProcessingException;
-import org.nvo.service.validation.ConfigurationException;
 
 import javax.xml.parsers.DocumentBuilder; 
 import javax.xml.parsers.DocumentBuilderFactory; 
 import javax.xml.parsers.ParserConfigurationException; 
 import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.Transformer;
-import javax.xml.transform.TransformerException;
-import javax.xml.transform.TransformerConfigurationException;
 import javax.xml.transform.OutputKeys;
-import javax.xml.transform.Templates;
 import javax.xml.transform.dom.DOMSource;
-import javax.xml.transform.stream.StreamSource;
 import javax.xml.transform.stream.StreamResult;
 
 import org.xml.sax.SAXParseException;
@@ -30,17 +26,13 @@ import org.xml.sax.SAXException;
 import org.xml.sax.InputSource;
 import org.w3c.dom.Element;
 import org.w3c.dom.Document;
-import org.w3c.dom.DOMException;
 
 import java.io.Reader;
 import java.io.FileReader;
-import java.io.Writer;
 import java.io.IOException;
 import java.io.FileNotFoundException;
-import java.io.InputStream;
 import java.util.Date;
 import java.util.TimeZone;
-import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 
 /**
@@ -56,36 +48,32 @@ import java.text.SimpleDateFormat;
  * as children of a given parent element.  
  * <p>
  * This class provides some control over what the XML container looks like.
- * For a more "user-friendly" interface, see also {@link VOResourceAssessor}.  
+ * For a more "user-friendly" interface, see also {@link VOResourceAssayer}.
  */
 public class VOResourceValidater {
 
-    protected TransformerFactory tfact = null;
+    protected final TransformerFactory tfact;
     protected DocumentBuilderFactory df = DocumentBuilderFactory.newInstance();
     protected SchemaLocation sl = null;
-    protected Class wrtClass = null;
-    protected XSLEvaluator eval = null;
+    protected final XSLEvaluator eval;
     protected VOResourceParsingErrors pe = new VOResourceParsingErrors();
     protected ResultTypes resultTypes = new ResultTypes(ResultTypes.ADVICE);
 
     /**
-     * create a validater that can test multiple VOResource documents
+     * create a validator that can test multiple VOResource documents
      * @param schemaLoc    the mapping of schema namespaces to files
      * @param stylesheetfile   the stylesheet to use to apply the 
      *                       extra-schema tests.
-     * @param resClass     the class to use to lookup the location of 
+     * @param resClass     the class to use to look up the location of
      *                       the stylesheet as resources.  May be null.  
      * @param transfact    a TransformerFactory to reuse.  May be null.
      */
     public VOResourceValidater(SchemaLocation schemaLoc,
-                               String stylesheetfile, Class resClass, 
+                               String stylesheetfile, Class<?> resClass,
                                TransformerFactory transfact)
     {
-        tfact = transfact;
-        if (tfact == null) tfact = TransformerFactory.newInstance();
-
-        eval = new XSLEvaluator(tfact, 
-                                (resClass == null) ? getClass() : resClass);
+        tfact = transfact == null ? TransformerFactory.newInstance() : transfact;
+        eval = new XSLEvaluator(tfact, (resClass == null) ? getClass() : resClass);
         eval.setDefaultResponseType("");
         eval.setParsingErrorHandler(pe);
 
@@ -95,7 +83,7 @@ public class VOResourceValidater {
     }
 
     /**
-     * create a validater that can test multiple VOResource documents.
+     * create a validator that can test multiple VOResource documents.
      * A built-in stylesheet (checkVOResource.xsl) will be used to apply
      * extra-schema tests.
      * @param schemaLoc   the mapping of schema namespaces to files
@@ -105,21 +93,21 @@ public class VOResourceValidater {
     }
 
     /**
-     * create a validater that can test multiple VOResource documents
+     * create a validator that can test multiple VOResource documents
      * @param schemaLoc    the mapping of schema namespaces to files
      * @param stylesheetfile   the stylesheet to use to apply the 
      *                       extra-schema tests.
-     * @param resClass     the class to use to lookup the location of 
+     * @param resClass     the class to use to look up the location of
      *                       the stylesheet as resources.  May be null.  
      */
     public VOResourceValidater(SchemaLocation schemaLoc,
-                               String stylesheetfile, Class resClass)
+                               String stylesheetfile, Class<?> resClass)
     {
         this(schemaLoc, stylesheetfile, resClass, null);
     }
 
     /**
-     * create a validater that can test multiple VOResource documents
+     * create a validator that can test multiple VOResource documents
      * @param schemaLoc   the mapping of schema namespaces to files
      * @param stylesheetfile   the stylesheet to use to apply the 
      *                       extra-schema tests.
@@ -129,7 +117,7 @@ public class VOResourceValidater {
     }
 
     /**
-     * create a validater that can test multiple VOResource documents.  Built-in
+     * create a validator that can test multiple VOResource documents.  Built-in
      * copies of VOResource schemas will be used to do schema validation, and
      * a built-in stylesheet (checkVOResource.xsl) will be used to apply
      * extra-schema tests.
@@ -173,7 +161,7 @@ public class VOResourceValidater {
      * usually) by default in the validation results.  
      * @param type   the type to include OR-ed together.  These are usually 
      *                 taken from the defined constants from 
-     *                 {@link org.nvo.service.validation.ResultType ResultType},
+     *                 {@link org.nvo.service.validation.ResultTypes ResultType},
      *                 but it can cover user-defined values.
      */
     public void addResultTypes(int type) {
@@ -185,7 +173,7 @@ public class VOResourceValidater {
      * usually) by default in the validation results.  
      * @param type   the types to include OR-ed together.  These are usually 
      *                 one of the defined constants from 
-     *                 {@link org.nvo.service.validation.ResultType ResultType},
+     *                 {@link org.nvo.service.validation.ResultTypes ResultType},
      *                 but it can cover user-defined values.
      */
     public void setResultTypes(int type) {
@@ -279,10 +267,6 @@ public class VOResourceValidater {
      * @param appendTo   the DOM Element to append the validation result to 
      *                      as children.  That is, the test results will be
      *                      placed inside this element.  
-     * @param docname    the name of the input document being validated.  This
-     *                      name will be noted in the validation results element
-     *                      appended to the given element as the "recordName" 
-     *                      attribute.  If null, the name will not be specified.
      * @return Document  the parsed record
      */
     public Document parseAndValidate(Reader document, Element appendTo)
@@ -305,8 +289,7 @@ public class VOResourceValidater {
      *                      attribute.  If null, the name will not be specified.
      * @return Document  the parsed record
      */
-    Document validate(Reader document, Element appendTo, String docname, 
-                      int[] ntestsout) 
+    Document validate(Reader document, Element appendTo, String docname, int[] ntestsout)
         throws TestingException
     {
         pe.clear();
@@ -316,7 +299,7 @@ public class VOResourceValidater {
 
         // get the element that applyExtraTests() added to appendTo; we 
         // will insert our parsing errors into that 
-        Element added = eval.getLastChildElement(appendTo);
+        Element added = EvaluatorBase.getLastChildElement(appendTo);
         if (added == null) added = appendTo;
 
         // add the parsing errors
@@ -425,10 +408,7 @@ public class VOResourceValidater {
             System.err.println("VOResourceValidater: no VOResource file given");
             System.exit(1);
         }
-            
-        // String stylesheet = "checkVOResource.xsl";
-        // Class ours = VOResourceValidater.class;
-        // SchemaLocation sl = new SchemaLocation(ours);
+
         TransformerFactory tFactory = TransformerFactory.newInstance();
         tFactory.setAttribute("indent-number", 2);
         VOResourceValidater validater = new VOResourceValidater(tFactory);
@@ -441,22 +421,17 @@ public class VOResourceValidater {
             System.err.println("VOResourceValidater: " + args[0] + 
                                ": file not found");
             System.exit(1);
-        } catch (IOException ex) {
-            System.err.println("VOResourceValidater: trouble reading " + 
-                               args[0] + ": " + ex.getMessage());
-            System.exit(1);
         }
 
         try {
-            DocumentBuilder builder = 
-                DocumentBuilderFactory.newInstance().newDocumentBuilder();
-            Document out = builder.newDocument();
+            final DocumentBuilder builder = DocumentBuilderFactory.newInstance().newDocumentBuilder();
+            final Document out = builder.newDocument();
             out.setXmlStandalone(true);
             out.setXmlVersion("1.0");
             Element root = out.createElement("vorvalidate");
             out.appendChild(root);
 
-            int nt = validater.validate(rdr, root);
+            validater.validate(rdr, root);
 
             Transformer transformer = tFactory.newTransformer();
             transformer.setOutputProperty(OutputKeys.INDENT, "yes");
@@ -469,9 +444,7 @@ public class VOResourceValidater {
             System.out.println();
         }
         catch (Exception ex) {
-            ex.printStackTrace();
+            ex.printStackTrace(System.err);
         }
-            
     }
-
 }

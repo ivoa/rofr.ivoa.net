@@ -7,14 +7,9 @@ import org.nvo.service.validation.ValidaterListener;
 import org.nvo.service.validation.ConfigurationException;
 
 import org.w3c.dom.Document;
-import org.w3c.dom.Element;
 
 import java.io.File;
-import java.util.Map;
-import java.util.Properties;
 
-import javax.xml.parsers.DocumentBuilder; 
-import javax.xml.parsers.DocumentBuilderFactory; 
 import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.Transformer;
 import javax.xml.transform.stream.StreamResult;
@@ -64,21 +59,18 @@ public class TestHarvestValidater {
                 new HarvestValidater(config, urlbase, cacheDir, false);
             validater.addDefaultResultTypes(ResultTypes.ADVICE);
 
-            ValidaterListener monitor = new ValidaterListener() {
-                public void progressUpdated(String id, boolean done, Map status)
-                {
-                    Boolean ok = (Boolean) status.get("ok");
-                    if (ok == null) 
-                        System.err.print("?? ");
-                    else 
-                        System.err.print(ok.booleanValue() ? "OK " : "Ack! ");
+            ValidaterListener monitor = (id, done, status) -> {
+                Boolean ok = (Boolean) status.get("ok");
+                if (ok == null)
+                    System.err.print("?? ");
+                else
+                    System.err.print(ok ? "OK " : "Ack! ");
 
-                    String message = (String) status.get("message");
-                    System.err.println(status.get("query") + ": " + message);
-                                       
-                    if (((Boolean) status.get("done")).booleanValue()) 
-                        System.err.println("testing complete.");
-                }
+                String message = (String) status.get("message");
+                System.err.println(status.get("query") + ": " + message);
+
+                if ((Boolean) status.get("done"))
+                    System.err.println("testing complete.");
             };
 
             Document out = validater.validate(5, monitor);
@@ -90,7 +82,7 @@ public class TestHarvestValidater {
         }
         catch (Exception ex) {
             System.err.println("Error: " + ex.getMessage());
-            ex.printStackTrace();
+            ex.printStackTrace(System.err);
             System.exit(1);
         }
     }

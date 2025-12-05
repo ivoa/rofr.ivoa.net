@@ -3588,7 +3588,7 @@ Or, alternatively, using a single STC type to generate a document:
     <MySTC xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
         xmlns="http://www.ivoa.net/xml/STC/stc-v1.30.xsd" 
         xmlns:xlink="http://www.w3.org/1999/xlink" 
-        xsi:schemaLocation="http://www.ivoa.net/xml/STC/stc-v1.30.xsd stc-v1.30.xsd" 
+        xsi:schemaLocation="http://www.ivoa.net/xml/STC/stc-v1.30.xsd"
         xsi:type="stcXXXType">
         ...
     </MySTC>

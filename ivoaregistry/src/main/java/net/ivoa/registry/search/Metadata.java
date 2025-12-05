@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.ListIterator;
 import java.util.LinkedList;
 import java.util.HashMap;
+import java.util.Map;
 import java.util.StringTokenizer;
 
 /**
@@ -23,7 +24,7 @@ public class Metadata {
     // the delegate node
     private Node del = null;
     private String parentPath = null;
-    protected HashMap cache = new HashMap();
+    protected Map<String, String[]> cache = new HashMap<>();
 
     protected static final String XSI_NS = 
         "http://www.w3.org/2001/XMLSchema-instance";
@@ -57,7 +58,7 @@ public class Metadata {
      */
     public String getPathName() { return parentPath; }
 
-    class MatchedBlocks extends LinkedList {
+    static class MatchedBlocks extends LinkedList<Metadata> {
         public MatchedBlocks(Metadata first) {
             addLast(first);
         }
@@ -66,7 +67,7 @@ public class Metadata {
             addLast(new Metadata(node, base + "/" + node.getNodeName()));
         }
 
-        public Metadata pop() { return (Metadata) removeFirst(); }
+        public Metadata pop() { return removeFirst(); }
     }
 
     /**
@@ -80,7 +81,7 @@ public class Metadata {
      * @throws IllegalArgumentException  if any field except the last one 
      *             contains an "@" character
      */
-    protected List findBlocks(String path) throws IllegalArgumentException {
+    protected List<Metadata> findBlocks(String path) throws IllegalArgumentException {
         String name;
         Node node;
         int i;
@@ -157,13 +158,7 @@ public class Metadata {
     public Metadata[] getBlocks(String path) 
          throws IllegalArgumentException 
     {
-        List matched = findBlocks(path);
-        Metadata[] out = new Metadata[matched.size()];
-        ListIterator iter = matched.listIterator();
-        for(int i=0; i < out.length && iter.hasNext(); i++) {
-            out[i] = (Metadata) iter.next();
-        }
-        return out;
+        return findBlocks(path).toArray(Metadata[]::new);
     }
 
     /**
@@ -178,15 +173,15 @@ public class Metadata {
      *             contains an "@" character
      */
     public String[] getParameters(String path) {
-        String[] out = (String[]) cache.get(path);
+        String[] out = cache.get(path);
         if (out != null) return out;
 
-        List matched = findBlocks(path);
+        List<Metadata> matched = findBlocks(path);
 
-        LinkedList values = new LinkedList();
-        ListIterator iter = matched.listIterator();
+        LinkedList<String> values = new LinkedList<>();
+        ListIterator<Metadata> iter = matched.listIterator();
         while(iter.hasNext()) {
-            Node node = ((Metadata) iter.next()).getDOMNode();
+            Node node = iter.next().getDOMNode();
             if (node.getNodeType() == Node.ATTRIBUTE_NODE) {
                 values.addLast(node.getNodeValue());
             }
@@ -206,9 +201,9 @@ public class Metadata {
         }
 
         out = new String[values.size()];
-        iter = values.listIterator();
+        final ListIterator<String> valuesIterator = values.listIterator();
         for(int i=0; i < out.length; i++) {
-            out[i] = (String) iter.next();
+            out[i] = valuesIterator.next();
         }
         cache.put(path, out);
 
@@ -238,7 +233,6 @@ public class Metadata {
     public String getXSIType() {
         if (del.getNodeType() != Node.ELEMENT_NODE) return null;
         String out = ((Element) del).getAttributeNS(XSI_NS, "type");
-        if (out == null) return null;
         int c = out.indexOf(":");
         if (c >= 0) out = out.substring(c+1);
         return out;

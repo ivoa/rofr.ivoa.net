@@ -19,10 +19,10 @@ public class StatusHelper {
     /**
      * return a new status Hashtable container
      */
-    public Map newStatus() {
+    public Map<String, Object> newStatus() {
 
-        Integer zero = new Integer(0);
-        HashMap out = new HashMap(10);
+        Integer zero = 0;
+        Map<String, Object> out = new HashMap<>(10);
 
         out.put("id", newID());
         out.put("done", Boolean.FALSE);
@@ -54,13 +54,13 @@ public class StatusHelper {
      * @param name      the name of the next query to be run (can be null).
      * @param desc      the description for the next query (can be null).  
      */
-    public void setNextQuery(Map status, String name, String desc) {
+    public void setNextQuery(Map<String, Object> status, String name, String desc) {
         if (name == null) name = empty;
         if (desc == null) desc = empty;
 
         synchronized (status) {
             String oldName = (String) status.get("nextQueryName");
-            if (oldName != null && oldName.length() > 0) {
+            if (oldName != null && !oldName.isEmpty()) {
                 status.put("lastQueryName", oldName);
                 String oldDesc = (String) status.get("nextQueryDescription");
                 if (oldDesc == null) oldDesc = empty;

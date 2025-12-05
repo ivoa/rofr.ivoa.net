@@ -18,12 +18,12 @@ import org.apache.commons.io.IOUtils;
 
 public class HarvestedRecordTest {
 
-    static final String testrec = "vores.xml";
+    static final String TEST_RECORD = "/vores.xml";
     static final String testout = "vores-harvested.xml";
     static final String tmppath = System.getProperty("test.tmpdir", System.getProperty("java.io.tmpdir"));
 
     Reader openTestRec() {
-        return new InputStreamReader(Objects.requireNonNull(getClass().getClassLoader().getResourceAsStream(testrec)));
+        return new InputStreamReader(Objects.requireNonNull(HarvestedRecordTest.class.getResourceAsStream(TEST_RECORD)));
     }
 
     @Test 
@@ -266,7 +266,8 @@ public class HarvestedRecordTest {
 
     }
 
-    @Test public void testGetProperty() {
+    @Test
+    public void testGetProperty() {
         Properties p = HarvestedRecord.makeProps("ivo://goob", "2013", "active");
         p.setProperty("ep", "zub");
         HarvestedRecord rec = new HarvestedRecord(p);
@@ -277,7 +278,8 @@ public class HarvestedRecordTest {
         assertEquals("zub", rec.getProperty("ep"));
     }
 
-    @Test public void testWriteContent() throws Exception {
+    @Test
+    public void testWriteContent() throws Exception {
         Reader r = openTestRec();
         assertNotNull(r);
         HarvestedRecord rec = new HarvestedRecord("ivo://goob", "2013", r);

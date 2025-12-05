@@ -22,9 +22,9 @@ import org.w3c.dom.Document;
 import org.w3c.dom.DOMException;
 
 /**
- * A class that will validate a VOResource document and return an listing (or
- * <em>assay</em>) of the results.  This provides an interface ontop of 
- * {@link VOResourceValidater} that is more simpler to use in a programming,
+ * A class that will validate a VOResource document and return a listing (or
+ * <em>assay</em>) of the results.  This provides an interface on top of
+ * {@link VOResourceValidater} that is simpler to use in a programming,
  * in-memory context.  
  */
 public class VOResourceAssayer {

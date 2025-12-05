@@ -7,6 +7,10 @@
            elementFormDefault="unqualified" attributeFormDefault="unqualified"
            version="1.2">
 
+<!-- extra provenance: after
+http://mail.ivoa.net/pipermail/registry/2020-July/005432.html
+make ProtoSpectralAccess be based on vr:Capabilitiy, too. -->
+
    <xs:annotation>
       <xs:appinfo>
         <vm:schemaName>SSA</vm:schemaName>
@@ -955,7 +959,7 @@
       </xs:annotation>
 
       <xs:complexContent>
-         <xs:extension base="ssap:SSACapRestriction">
+         <xs:extension base="vr:Capability">
             <xs:sequence>
 
                <xs:element name="dataSource" type="ssap:DataSource"

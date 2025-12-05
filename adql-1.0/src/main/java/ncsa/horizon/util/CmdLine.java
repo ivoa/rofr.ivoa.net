@@ -112,12 +112,12 @@ public class CmdLine {
     /**
      * the list of options
      */
-    protected Hashtable options = null;
+    protected Hashtable<Character, Object> options = null;
 
     /**
      * the list of normal arguments
      */
-    protected Vector argList = null;
+    protected Vector<String> argList = null;
 
     /**
      * flags that control reaction to arguments
@@ -187,17 +187,17 @@ public class CmdLine {
         if (config != null && (flags&WARN) > 0) 
           System.err.println("Warning: Resetting Command Line configuration");
         config = configuration;
-        options = new Hashtable();
+        options = new Hashtable<>();
 
         // parse the config string
         char[] conchr = config.toCharArray();
 
         Character chr = null;
         Object state = null;
-        Integer zero = new Integer(0);
+        int zero = 0;
 
         for(int i=0; i < conchr.length; i++) {
-            if (! chr.isLetterOrDigit(conchr[i]) && (flags&WARN) > 0) {
+            if (! Character.isLetterOrDigit(conchr[i]) && (flags&WARN) > 0) {
                 System.err.println("Warning: ignoring non-letter in " +
                                    "configuration string: " + config + 
                                    " ('" + conchr[i] + "' at pos. " + i + 
@@ -205,7 +205,7 @@ public class CmdLine {
                 continue;
             }
 
-            chr = new Character(conchr[i]);
+            chr = conchr[i];
             state = null;
 
             if (options.containsKey(chr) && (flags&WARN) > 0) 
@@ -238,8 +238,8 @@ public class CmdLine {
 
         if (args == null) return;
         boolean more = true;
-        argList = new Vector(args.length);
-        StringBuffer unrec = new StringBuffer();
+        argList = new Vector<>(args.length);
+        final StringBuilder unrec = new StringBuilder();
         char[] argary = null;
         Character opt = null;
         Object state = null;
@@ -252,7 +252,7 @@ public class CmdLine {
                 // we have a list of options
                 argary = args[i].toCharArray();
                 for(int j=1; j < argary.length; j++) {
-                    opt = new Character(argary[j]);
+                    opt = argary[j];
 
                     // do we recognize it?
                     if (! options.containsKey(opt)) {
@@ -275,14 +275,14 @@ public class CmdLine {
 
                         // it is a boolean switch; keep a count of number 
                         // of times it has been set in this command line
-                        state = new Integer( ((Integer)state).intValue() + 1 );
+                        state = (Integer) state + 1;
                         options.put(opt, state);
                     }
-                    else if (state instanceof Stack) {
+                    else if (state instanceof Stack<?>) {
 
-                        // it is a paramter switch; add argument to stack
+                        // it is a parameter switch; add argument to stack
                         // of parameters for this switch
-                        Stack list = (Stack) state;
+                        Stack<String> list = (Stack<String>) state;
                         if (j+1 < argary.length) {
 
                             // the parameter is in this argument
@@ -346,12 +346,11 @@ public class CmdLine {
      * return true if the input is a switched option
      */
     public synchronized boolean isSwitched(char c) {  
-        Character ch = new Character(c);
-        Object state = options.get(ch);
+        Object state = options.get(c);
 
         if (state == null) return false;
 
-        return ((state instanceof Integer) ? true : false);
+        return (state instanceof Integer);
     }
 
     /**
@@ -360,17 +359,15 @@ public class CmdLine {
      * configured option, this method returns -1.
      */
     public synchronized int getNumSet(char c) {
-        Character ch = new Character(c);
-        Object state = options.get(ch);
+        Object state = options.get(c);
 
-        if (state == null) return -1;
+        return switch (state) {
+            case null -> -1;
+            case Integer i -> i;
+            case Stack<?> stack -> stack.size();
+            default -> -1;
+        };
 
-        if (state instanceof Integer) 
-            return ((Integer)state).intValue();
-        else if (state instanceof Stack) 
-            return ((Stack)state).size();
-
-        return -1;
     }
 
     /**
@@ -381,18 +378,22 @@ public class CmdLine {
      * (i.e. "true" or "false").  
      */
     public synchronized String getValue(char c) {
-        Character ch = new Character(c);
-        Object state = options.get(ch);
+        Object state = options.get(c);
 
-        if (state == null) return null;
-
-        if (state instanceof Integer) {
-            Boolean yes = new Boolean( ((Integer)state).intValue() > 0 );
-            return yes.toString();
-        }
-        else if (state instanceof Stack) {
-            Stack vals = (Stack) state;
-            return ( (vals.size() > 0) ? (String)vals.lastElement() : null );
+        switch (state) {
+            case null -> {
+                return null;
+            }
+            case Integer i -> {
+                boolean yes = i > 0;
+                return Boolean.toString(yes);
+            }
+            case Stack<?> stack -> {
+                Stack<String> vals = (Stack<String>) stack;
+                return ((!vals.isEmpty()) ? vals.lastElement() : null);
+            }
+            default -> {
+            }
         }
 
         return null;
@@ -406,31 +407,30 @@ public class CmdLine {
      * option in the stack with each element being the same string: "true"
      * (admittedly not useful, but nevertheless symetric).
      */
-    public synchronized Stack getAllValues(char c) {
-        Character ch = new Character(c);
-        Object state = options.get(ch);
+    public synchronized Stack<String> getAllValues(char c) {
+        Object state = options.get(c);
 
-        if (state == null) return new Stack();
+        if (state == null) return new Stack<>();
 
-        Stack out = new Stack();
+        final Stack<String> out = new Stack<>();
         if (state instanceof Integer) {
-            int n = ((Integer)state).intValue();
+            int n = (Integer) state;
             out.ensureCapacity(n);
-            Boolean yes = new Boolean( n > 0 );
-            for(int i=0; i < n; i++) out.push(yes.toString());
+            boolean yes = n > 0;
+            for(int i=0; i < n; i++) out.push(Boolean.toString(yes));
         }
         else if (state instanceof Stack) {
-            return ((Stack) ((Stack)state).clone());
+            return ((Stack<String>) ((Stack<String>)state).clone());
         }
 
-        return new Stack();
+        return new Stack<>();
     }
 
     /**
      * return the options that this object is configured to look for 
      * in the form of an Enumeration
      */
-    public synchronized Enumeration options() {
+    public synchronized Enumeration<Character> options() {
         return options.keys();
     }
 
@@ -438,7 +438,7 @@ public class CmdLine {
      * return the arguments found in this command line in the form of 
      * an Enumeration
      */
-    public synchronized Enumeration arguments() {
+    public synchronized Enumeration<String> arguments() {
         return argList.elements();
     }
 
@@ -457,7 +457,7 @@ public class CmdLine {
      */
     public static String[] parseStringList(String input, String delim) {
         StringTokenizer t = new StringTokenizer(input, delim);
-        Vector parts = new Vector(t.countTokens());
+        Vector<String> parts = new Vector<>(t.countTokens());
         while (t.hasMoreTokens()) {
             parts.addElement(t.nextToken());
         }
@@ -476,7 +476,7 @@ public class CmdLine {
 
         // First determine if the -X flag is set indicating that a 
         // bad option should throw an exception.
-        CmdLine cl = null;
+        CmdLine cl;
         int flags = RELAX;
         try {
             cl = new CmdLine("XS", flags, use);
@@ -504,36 +504,36 @@ public class CmdLine {
             return;
         }
 
-        String type = null, switched = "switch", parm = "parameter", id = null;
-        Character o = null;
-        Enumeration e=cl.options();
+        String type, switched = "switch", parm = "parameter", id;
+        Character o;
+        Enumeration<Character> e=cl.options();
         while(e.hasMoreElements()) {
-            o = (Character) e.nextElement();
-            type = (cl.isSwitched(o.charValue())) ? switched : parm;
-            id = new String("-" + o + " (" + type + "): ");
+            o = e.nextElement();
+            type = (cl.isSwitched(o)) ? switched : parm;
+            id = "-" + o + " (" + type + "): ";
             
-            if (! cl.isSet(o.charValue())) {
+            if (! cl.isSet(o)) {
                 System.out.println(id + "not set");
             }
             else {
-                if (cl.isSwitched(o.charValue())) {
-                    int n = cl.getNumSet(o.charValue());
+                if (cl.isSwitched(o)) {
+                    int n = cl.getNumSet(o);
                     System.out.println(id + "set " + n + " times");
                 }
                 else {
-                    Stack parms = cl.getAllValues(o.charValue());
+                    Stack<String> parms = cl.getAllValues(o);
                     int n = parms.size();
                     StringBuffer line = new StringBuffer(id + n + " arguments");
                     for(; n > 0; n--) {
-                        String item = (String) parms.pop();
-                        line.append("\n  \"" + item + "\"");
+                        String item = parms.pop();
+                        line.append("\n  \"").append(item).append("\"");
                         if (item.indexOf(',') >= 0) {
                             String[] list = parseStringList(item, ", ");
                             line.append(" => ");
                             if (list.length > 0) 
-                                line.append("\"" + list[0] + "\"");
+                                line.append("\"").append(list[0]).append("\"");
                             for(int i=1; i<list.length; i++)
-                                line.append(", \"" + list[i] + "\"");
+                                line.append(", \"").append(list[i]).append("\"");
                         }
                     }
                     System.out.println(line);
@@ -542,9 +542,9 @@ public class CmdLine {
         }
 
         System.out.println("Non-option arguments (" + cl.getNumArgs() + "): ");
-        e = cl.arguments();
-        while (e.hasMoreElements()) {
-            System.out.println("    \"" + e.nextElement() + "\"");
+        final Enumeration<String> argumentsEnum = cl.arguments();
+        while (argumentsEnum.hasMoreElements()) {
+            System.out.println("    \"" + argumentsEnum.nextElement() + "\"");
         }
     }
 
@@ -568,7 +568,7 @@ public class CmdLine {
          */
         public UnrecognizedOptionException(char c) { 
             super(); 
-            this.c = new Character(c);
+            this.c = c;
         }
 
         /**
@@ -592,7 +592,7 @@ public class CmdLine {
             if (c == null) 
                 return super.getMessage();
             else 
-                return new String("Unrecognized option: -" + c);
+                return "Unrecognized option: -" + c;
         }
     }
 }

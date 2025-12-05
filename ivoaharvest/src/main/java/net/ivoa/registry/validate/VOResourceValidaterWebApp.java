@@ -1,11 +1,9 @@
 package net.ivoa.registry.validate;
 
-import org.nvo.service.validation.webapp.ValidationException;
 import org.nvo.service.validation.webapp.InternalServerException;
 import org.nvo.service.validation.ResultTypes;
 import org.nvo.service.validation.TestingException;
 import org.nvo.service.validation.TestingIOException;
-import org.nvo.service.validation.webapp.InternalServerException;
 import net.ivoa.util.Configuration;
 import ncsa.xml.validation.SchemaLocation;
 
@@ -20,8 +18,6 @@ import javax.xml.parsers.ParserConfigurationException;
 import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.Transformer;
 import javax.xml.transform.TransformerException;
-import javax.xml.transform.TransformerConfigurationException;
-import javax.xml.transform.OutputKeys;
 import javax.xml.transform.Templates;
 import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamSource;
@@ -30,11 +26,14 @@ import javax.xml.transform.stream.StreamResult;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
-import javax.servlet.http.HttpSession;
 import javax.servlet.ServletException;
 
+import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.ArrayList;
+import java.util.Objects;
 import java.util.Properties;
 import java.util.Hashtable;
 import java.util.StringTokenizer;
@@ -45,7 +44,6 @@ import java.io.InputStreamReader;
 import java.io.InputStream;
 import java.io.Writer;
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.net.URL;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
@@ -79,18 +77,11 @@ public class VOResourceValidaterWebApp extends HttpServlet {
 
     Properties ctypes = new Properties();
     Properties formatStylesheets = new Properties();
-    Hashtable formatTemplates = new Hashtable();
+    final Hashtable<String, Templates> formatTemplates = new Hashtable<>();
     DocumentBuilder builder = null;
     
     /**
-     * create the servlet
-     * @param config   the configuration data for this instance.  If null, 
-     *                     a default configuration will be loaded from a file 
-     *                     called "config.xml" located in one of the default 
-     *                     locations searched by the 
-     *                     {@link net.ivoa.util.Configuration} class.  
-     * @param tf       the XML TransformerFactory to use to create Transform
-     *                     instances from.  If null, a new one will be created.
+     * create the servlet with default configuration
      */
     public VOResourceValidaterWebApp() { 
         this(null, null);
@@ -143,7 +134,7 @@ public class VOResourceValidaterWebApp extends HttpServlet {
                                        + ex.getMessage(), ex);
         }
 
-        // create the validater inputs from the configuration parameters
+        // create the validator inputs from the configuration parameters
         Configuration econfig = config.getConfiguration("evaluator", "name",
                                                         "voresource");
         testStylesheet = getStylesheetFileName(econfig);
@@ -156,25 +147,25 @@ public class VOResourceValidaterWebApp extends HttpServlet {
         loadFormatStylesheets(config);
         Configuration nconfig = config.getConfiguration("names", null, null);
         String name = nconfig.getParameter("rootElem");
-        if (name != null && name.length() > 0) rootElemName = name;
+        if (name != null && !name.isEmpty()) rootElemName = name;
         name = nconfig.getParameter("recordElem");
-        if (name != null && name.length() > 0) fileElemName = name;
+        if (name != null && !name.isEmpty()) fileElemName = name;
 
         // get upload limits
         String cache = config.getParameter("cacheHome");
         if (cache != null) {
             cacheHome = new File(cache);
 
-            Configuration limconfig = 
+            Configuration limitConfig =
                 config.getConfiguration("limits", null, null);
-            if (limconfig != null) {
-                int val = getIntParam(limconfig, "fileSizeThreshold");
+            if (limitConfig != null) {
+                int val = getIntParam(limitConfig, "fileSizeThreshold");
                 if (val > 0) fileSizeThreshold = val;
-                val = getIntParam(limconfig, "maxFileSize");
+                val = getIntParam(limitConfig, "maxFileSize");
                 if (val > 0) maxFileSize = val;
-                val = getIntParam(limconfig, "maxRequestSize");
+                val = getIntParam(limitConfig, "maxRequestSize");
                 if (val > 0) maxRequestSize = val;
-                val = getIntParam(limconfig, "maxNumFiles");
+                val = getIntParam(limitConfig, "maxNumFiles");
                 if (val > 0) maxNumFiles = val;
             }
         }
@@ -189,17 +180,17 @@ public class VOResourceValidaterWebApp extends HttpServlet {
      */
     private void loadFormatStylesheets(Configuration config) {
         Configuration[] sheets = config.getBlocks("resultStylesheet");
-        String format = null, sheet = null, empty="";
-        for (int i=0; i < sheets.length; i++) {
-            format = sheets[i].getParameter("@format");
-            if (format == null || format.length() == 0) {
-                System.err.println("VOResourceValidaterWebApp: " + 
-                                   "configuration problem ignored: " + 
-                                   "format not specified for resultStylesheet");
+        String format, sheet, empty="";
+        for (Configuration configuration : sheets) {
+            format = configuration.getParameter("@format");
+            if (format == null || format.isEmpty()) {
+                System.err.println("VOResourceValidaterWebApp: " +
+                        "configuration problem ignored: " +
+                        "format not specified for resultStylesheet");
                 continue;
             }
-            sheet = sheets[i].getParameter(empty);
-            if (sheet != null && sheet.length() > 0)
+            sheet = configuration.getParameter(empty);
+            if (sheet != null && !sheet.isEmpty())
                 formatStylesheets.put(format, sheet);
         }
     }
@@ -215,7 +206,7 @@ public class VOResourceValidaterWebApp extends HttpServlet {
 
         File stylesheetDir = null;
         String ssdir = config.getParameter("stylesheetDir");
-        if (ssdir != null && ssdir.length() == 0) ssdir = null;
+        if (ssdir != null && ssdir.isEmpty()) ssdir = null;
         if (ssdir != null) 
             stylesheetDir = new File(ssdir);
 
@@ -226,10 +217,10 @@ public class VOResourceValidaterWebApp extends HttpServlet {
             responseType = sheets[i].getParameter("@responseType");
             if (responseType == null) responseType = empty;
             sheet = sheets[i].getParameter(empty);
-            if (sheet != null && sheet.length() > 0) {
+            if (sheet != null && !sheet.isEmpty()) {
                 if (stylesheetDir != null) 
                     sheet = (new File(stylesheetDir, sheet)).getAbsolutePath();
-                if (responseType == defaultResponseType)
+                if (responseType.equals(defaultResponseType))
                     return sheet;
             }
             if (i == 0) first = sheet;
@@ -239,7 +230,7 @@ public class VOResourceValidaterWebApp extends HttpServlet {
     }
 
     /**
-     * handle a GET request.  The validation is executed synchronousely, and the
+     * handle a GET request.  The validation is executed synchronously, and the
      * results are returned.  
      */
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) 
@@ -249,19 +240,18 @@ public class VOResourceValidaterWebApp extends HttpServlet {
         String qs = req.getQueryString();
         if (qs == null) 
             throw new ServletException("Missing arguments");
-        String runid = parseArgs(qs, args);
 
         String recurls = args.getProperty("recordURL");
-        if (recurls == null || recurls.length() == 0)
+        if (recurls == null || recurls.isEmpty())
             throw new ServletException("missing resource record url " +
                                        "(recordURL)");
 
-        doValidate(req, resp, args, null);
+        doValidate(resp, args, null);
     }
 
     /**
      * handle a POST request.  This is used for uploading records directly 
-     * from the user's local disk.  The validation is executed synchronousely, 
+     * from the user's local disk.  The validation is executed synchronously,
      * and the results are returned.  
      */
     protected void doPost(HttpServletRequest req, HttpServletResponse resp) 
@@ -282,15 +272,15 @@ public class VOResourceValidaterWebApp extends HttpServlet {
         upload.setSizeMax(maxRequestSize);    // 20 MB, by default
 
         // Parse the request
-        List /* FileItem */ params = null;
+        List<FileItem> params;
         try {
             params = upload.parseRequest(req);
         } catch (FileUploadException ex) {  throw new ServletException(ex);  }
-        Iterator it = params.iterator();
+        Iterator<FileItem> it = params.iterator();
         String name = null, val = null;
-        ArrayList<FileItem> files = new ArrayList<FileItem>(2);
+        List<FileItem> files = new ArrayList<>(2);
         while (it.hasNext()) {
-            FileItem param =  (FileItem) it.next();
+            FileItem param =  it.next();
 
             name = param.getFieldName();
             // System.err.println("field: " + name);
@@ -310,35 +300,34 @@ public class VOResourceValidaterWebApp extends HttpServlet {
             }
         }
 
-        doValidate(req, resp, args, files);
+        doValidate(resp, args, files);
     }
 
     /**
      * handle a request.  This is used for uploading records directly 
-     * from the user's local disk.  The validation is executed synchronousely, 
+     * from the user's local disk.  The validation is executed synchronously,
      * and the results are returned.  
      */
-    protected void doValidate(HttpServletRequest req, HttpServletResponse resp,
-                              Properties args, List<FileItem> files) 
+    void doValidate(HttpServletResponse resp, Properties args, List<FileItem> files)
          throws ServletException, IOException
     {
         // determine output format
         String format = args.getProperty("format");
-        Transformer printer = null;
+        final Transformer printer;
         try {
             printer = getTransformerForFormat(format);
         } catch (InternalServerException ex) {
-            ex.printStackTrace();
+            ex.printStackTrace(System.err);
             throw new ServletException("Internal Config. Error while " +
-                                       "suppporting requested output format");
+                                       "supporting requested output format");
         }
         if (printer == null) 
             throw new ServletException("Unsupported format: " + format);
 
-        VOResourceValidater validater = 
+        VOResourceValidater validator =
             new VOResourceValidater(sl, testStylesheet, getClass(), tf);
-        if (fileElemName != null) validater.setResponseRootName(fileElemName);
-        validater.setResultTypes(getResultTypes(args));
+        if (fileElemName != null) validator.setResponseRootName(fileElemName);
+        validator.setResultTypes(getResultTypes(args));
 
         // prep XML results container
         Document results = builder.newDocument();
@@ -360,21 +349,16 @@ public class VOResourceValidaterWebApp extends HttpServlet {
             FileItem file = fi.next();
             docname = file.getName().trim();
             // System.err.println("checking file: " + docname);
-            if (docname.length() == 0) continue;
+            if (docname.isEmpty()) continue;
             i++;
             
             try {
                 InputStream is = file.getInputStream();
-                validater.validate(new InputStreamReader(is), root, docname);
+                validator.validate(new InputStreamReader(is), root, docname);
                 is.close();
                 root.appendChild(results.createTextNode("\n"));                
             }
-            catch (IOException ex) {
-                addTestingFailure(root, docname, "comm.2",
-                                  "Apparent error reading supplied URL: " +
-                                  ex.getMessage());
-            }
-            catch (TestingIOException ex) {
+            catch (IOException | TestingIOException ex) {
                 addTestingFailure(root, docname, "comm.2",
                                   "Apparent error reading supplied URL: " +
                                   ex.getMessage());
@@ -382,7 +366,7 @@ public class VOResourceValidaterWebApp extends HttpServlet {
             catch (TestingException ex) {
                 addTestingFailure(root, docname, "internal",
                                   "Failed to process document for apparent internal errors; contact service provider for help");
-                ex.printStackTrace();
+                ex.printStackTrace(System.err);
                 break;
             }
           }
@@ -391,23 +375,23 @@ public class VOResourceValidaterWebApp extends HttpServlet {
         // run the validation on each file specified
         String recurls = args.getProperty("recordURL");
         recurls = (recurls == null) ? "" : recurls.trim();
-        if ((files == null || files.size() == 0) && recurls.length() == 0)
+        if ((files == null || files.isEmpty()) && recurls.isEmpty())
             throw new ServletException("No files or URLs provided to check");
-        if (recurls.length() != 0) {
+        if (!recurls.isEmpty()) {
           StringTokenizer st = new StringTokenizer(recurls);
           while (st.hasMoreTokens() && i < max) {
             docname = st.nextToken();
             try {
-                URL url = new URL(docname);
+                final URL url = URI.create(docname).toURL();
 
-                if (url.getProtocol() == "file") {
+                if (Objects.equals(url.getProtocol(), "file")) {
                     addTestingFailure(root, docname, "comm.2", 
                                       "Unsupported URL protocol");
                     continue;
                 }
 
                 InputStream is = url.openStream();
-                validater.validate(new InputStreamReader(is), root, docname);
+                validator.validate(new InputStreamReader(is), root, docname);
                 is.close();
             }
             catch (MalformedURLException ex) {
@@ -416,12 +400,7 @@ public class VOResourceValidaterWebApp extends HttpServlet {
                                   "unable to access VOResource record from URL: " + 
                                   ex.getMessage());
             }
-            catch (IOException ex) {
-                addTestingFailure(root, docname, "comm.2",
-                                  "Apparent error reading supplied URL: " +
-                                  ex.getMessage());
-            }
-            catch (TestingIOException ex) {
+            catch (IOException | TestingIOException ex) {
                 addTestingFailure(root, docname, "comm.2",
                                   "Apparent error reading supplied URL: " +
                                   ex.getMessage());
@@ -429,7 +408,7 @@ public class VOResourceValidaterWebApp extends HttpServlet {
             catch (TestingException ex) {
                 addTestingFailure(root, docname, "internal",
                                   "Failed to process document for apparent internal errors; contact service provider for help");
-                ex.printStackTrace();
+                ex.printStackTrace(System.err);
                 break;
             }
             root.appendChild(results.createTextNode("\n"));                
@@ -492,18 +471,18 @@ public class VOResourceValidaterWebApp extends HttpServlet {
     protected Transformer getTransformerForFormat(String format) 
          throws InternalServerException
     {
-        if (format == null || format.length() == 0) 
+        if (format == null || format.isEmpty())
             format = (formatStylesheets.containsKey("html")) ? "html" : "xml";
 
         try {
-            Templates stylesheet = (Templates) formatTemplates.get(format);
+            Templates stylesheet = formatTemplates.get(format);
             if (stylesheet == null) {
-                String ssfile = config.getParameter("resultStylesheet", "format",
-                                                    format); 
+                String ssfile = config.getParameter(Path.of("resultStylesheet", "format",
+                                                    format).toString());
                 if (ssfile == null && "xml".equals(format)) ssfile = "";
                 if (ssfile == null) return null;
 
-                if (ssfile.length() == 0) return tf.newTransformer();
+                if (ssfile.isEmpty()) return tf.newTransformer();
 
                 stylesheet = tf.newTemplates(
                     new StreamSource(Configuration.openFile(ssfile, 
@@ -520,10 +499,9 @@ public class VOResourceValidaterWebApp extends HttpServlet {
     }
 
     /**
-     * add a test result to a given XML document reporting an exception-
-     * generating problem.
+     * add a test result to a given XML document reporting an exception-generating problem.
      * @param root      the element to add the result node to
-     * @param testname  the name of the VOResource record
+     * @param name  the name of the VOResource record
      * @param label     the test item name to give to the test node that 
      *                    captures the failure
      * @param message   the description of the failure
@@ -562,7 +540,7 @@ public class VOResourceValidaterWebApp extends HttpServlet {
         String runid = null;
         int eq;
         StringTokenizer st = new StringTokenizer(querystring, "&");
-        StringBuffer outqs = new StringBuffer();
+        StringBuilder outqs = new StringBuilder();
         while (st.hasMoreTokens()) {
             String arg = st.nextToken();
             eq = arg.indexOf("=");
@@ -586,24 +564,18 @@ public class VOResourceValidaterWebApp extends HttpServlet {
                 }
             }
         }
-        if (outqs.length() > 0) outqs.deleteCharAt(outqs.length()-1);
+        if (!outqs.isEmpty()) outqs.deleteCharAt(outqs.length()-1);
         out.setProperty("queryString", outqs.toString());
 
         return runid;
     }
 
-    private String decode(String in) {
-        try {
-            return URLDecoder.decode(in, "UTF-8");
-        }
-        catch (UnsupportedEncodingException ex) { return in; }
+    private static String decode(String in) {
+        return URLDecoder.decode(in, StandardCharsets.UTF_8);
     }
 
-    private String encode(String in) {
-        try {
-            return URLEncoder.encode(in, "UTF-8");
-        }
-        catch (UnsupportedEncodingException ex) { return in; }
+    private static String encode(String in) {
+        return URLEncoder.encode(in, StandardCharsets.UTF_8);
     }
 
     

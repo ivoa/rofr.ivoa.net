@@ -1,5 +1,6 @@
 package net.ivoa.registry.validate;
 
+import org.nvo.service.validation.EvaluatorBase;
 import org.nvo.service.validation.ParsingErrors;
 import org.nvo.service.validation.HTTPGetTestQuery;
 import org.nvo.service.validation.ResultTypes;
@@ -14,7 +15,6 @@ import org.nvo.service.validation.CachingTester;
 import org.nvo.service.validation.ConfigurationException;
 import org.nvo.service.validation.TimeoutException;
 import org.nvo.service.validation.UnrecognizedResponseTypeException;
-import org.nvo.service.validation.ProcessingException;
 import net.ivoa.registry.harvest.iterator.DocumentIterator;
 import net.ivoa.registry.harvest.iterator.HarvestRecordServer;
 import net.ivoa.registry.harvest.iterator.VOResourceExtractor;
@@ -32,21 +32,21 @@ import java.io.FilenameFilter;
 import java.io.FileOutputStream;
 import java.io.FileInputStream;
 import java.io.OutputStream;
-import java.io.InputStream;
 import java.io.Reader;
 import java.io.FileReader;
 import java.io.FileWriter;
+import java.net.URI;
 import java.net.URL;
-import java.net.MalformedURLException;
 import java.util.Properties;
 import java.util.LinkedList;
 import java.util.ListIterator;
-import java.util.Iterator;
 import java.util.Map;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Date;
+import java.util.Set;
 import java.util.TimeZone;
+import java.util.logging.Logger;
 import java.util.regex.Pattern;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
@@ -57,9 +57,7 @@ import javax.xml.parsers.ParserConfigurationException;
 import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.Transformer;
 import javax.xml.transform.TransformerException;
-import javax.xml.transform.TransformerConfigurationException;
 import javax.xml.transform.dom.DOMSource;
-import javax.xml.transform.stream.StreamSource;
 import javax.xml.transform.stream.StreamResult;
 
 import org.xml.sax.SAXException;
@@ -71,15 +69,17 @@ import org.w3c.dom.Document;
 import org.w3c.dom.DOMException;
 
 /**
- * a validater for the Harvesting interface of an IVOA-compliant registry 
- * that encodes the results in an XML format.  Unlike other validater classes
+ * a validator for the Harvesting interface of an IVOA-compliant registry
+ * that encodes the results in an XML format.  Unlike other validator classes
  * in this library, this one is configured on a per-endpoint basis; this allows 
  * it to make use of an optional disk cache for building up the XML results.
  * 
  */
 public class HarvestValidater {
 
-    protected Configuration config = null;
+    private static final Logger LOGGER = Logger.getLogger(HarvestValidater.class.getName());
+
+    protected final Configuration config;
     protected TransformerFactory tfact = TransformerFactory.newInstance();
     protected DocumentBuilderFactory df = DocumentBuilderFactory.newInstance();
     protected static StatusHelper statushelper = new StatusHelper();
@@ -87,9 +87,9 @@ public class HarvestValidater {
     protected String resultRootName = null;
     protected String queryRootName = null;
     protected ResultTypes defResultTypes = new ResultTypes(ResultTypes.ADVICE);
-    protected LinkedList queries = new LinkedList();
+    protected LinkedList<HTTPGetTestQuery.QueryData> queries = new LinkedList<>();
     protected Properties evalprops = new Properties();
-    protected SchemaLocation sl = null;
+    protected final SchemaLocation sl;
     protected int notGoodEnough = ResultTypes.FAIL;
 
     protected String baseurl = null;
@@ -100,13 +100,13 @@ public class HarvestValidater {
     protected Object ivoalock = new Object();
     protected Object vorlock = new Object();
 
-    private HashSet validatingThreads = new HashSet();
-    private boolean[] nowValidating = { false, false, false };
+    private final Set<Thread> validatingThreads = new HashSet<>();
+    private final boolean[] nowValidating = { false, false, false };
     protected final static int OAI  = 0;
     protected final static int IVOA = 1;
     protected final static int VOR  = 2;
 
-    protected Properties names = null;
+    protected Properties names;
     protected boolean builtinSchemas = false;
 
 
@@ -247,7 +247,7 @@ public class HarvestValidater {
      * may override this.  
      * @param type   the type to include OR-ed together.  These are usually 
      *                 taken from the defined constants from 
-     *                 {@link org.nvo.service.validatoin.ResultType ResultType},
+     *                 {@link org.nvo.service.validation.ResultTypes ResultType},
      *                 but it can cover user-defined values.
      */
     public void addDefaultResultTypes(int type) {
@@ -260,7 +260,7 @@ public class HarvestValidater {
      * may override this.  
      * @param type   the types to include OR-ed together.  These are usually 
      *                 one of the defined constants from 
-     *                 {@link org.nvo.service.validatoin.ResultType ResultType},
+     *                 {@link org.nvo.service.validation.ResultTypes ResultType},
      *                 but it can cover user-defined values.
      */
     public void setDefaultResultTypes(int type) {
@@ -295,10 +295,9 @@ public class HarvestValidater {
      * signal all threads currently running validate() to interrupt their 
      * testing and exit as soon as possible.  
      */
-    public final synchronized void interrupt() { 
-        Iterator it = validatingThreads.iterator();
-        while (it.hasNext()) {
-            ((Thread) it.next()).interrupt();
+    public final synchronized void interrupt() {
+        for (Thread validatingThread : validatingThreads) {
+            validatingThread.interrupt();
         }
     }
 
@@ -306,7 +305,7 @@ public class HarvestValidater {
      * return true if there is at least one Thread executing one of the 
      * validate methods.
      */
-    public boolean isValidating() {  return (validatingThreads.size() > 0); }
+    public boolean isValidating() {  return !validatingThreads.isEmpty(); }
 
     /**
      * return true if there is at least one Thread executing a particular
@@ -323,12 +322,9 @@ public class HarvestValidater {
      * @param millis   the amount of time to wait.  If <= 0, wait indefinitely.
      */
     public void waitForValidation(long millis) throws InterruptedException {
-        long start = (new Date()).getTime();
-        long now = start;
         long step = 100;
-        while (! isValidating() && (millis <= 0 || now-start > millis)) {
+        while (!isValidating() && millis <= 0) {
             Thread.sleep(step);
-            now = (new Date()).getTime();
             if (step < 2000) step *= 2;
         }
     }
@@ -341,7 +337,7 @@ public class HarvestValidater {
      * validation has not started yet, it will initiate the validation.  
      * @param listener   a listener that will be notified of progress
      */
-    public Document validateOAI(ValidaterListener listener, Map status)
+    public Document validateOAI(ValidaterListener listener, Map<String, Object> status)
          throws TestingException, IOException, InterruptedException
     {
         File explorerOut = null;
@@ -352,10 +348,8 @@ public class HarvestValidater {
         }
 
         // setup for tracking status
-        String id = null;
         if (listener != null) {
             status = setStatus(status);
-            id = (String) status.get("id");
         }
         
         if (isValidating(OAI)) 
@@ -380,19 +374,17 @@ public class HarvestValidater {
 
                 // look a local installation of the OAI Explorer
                 File explorercmd = null;
-                String explorerurl = null;
+                final String explorerurl;
                 Configuration tqconfig = 
                     OAIExplorerTestQuery.getTestQueryConfig(config, null);
                 explorerurl = tqconfig.getParameter("oaiExplorerURL");
-                if (tqconfig != null) {
-                    String val = tqconfig.getParameter("oaiExplorerCmd");
-                    if (val != null) {
-                        explorercmd = new File(val);
-                        if (! explorercmd.exists()) {
-                            complain("Warning: OAI Explorer command not found: "
-                                     + val);
-                            explorercmd = null;
-                        }
+                String val = tqconfig.getParameter("oaiExplorerCmd");
+                if (val != null) {
+                    explorercmd = new File(val);
+                    if (! explorercmd.exists()) {
+                        complain("Warning: OAI Explorer command not found: "
+                                 + val);
+                        explorercmd = null;
                     }
                 }
                 if (explorercmd == null && explorerurl == null) 
@@ -400,14 +392,14 @@ public class HarvestValidater {
                                                   "URL or local command found");
 
                 // get the OAI TestQuery
-                TestQuery tq = null;
+                final TestQuery tq;
+                final URL oaiURL = URI.create(baseurl).toURL();
                 if (explorercmd != null) {
                     // run locally
-                    tq = new OAIExplorerTestQuery(new URL(baseurl), explorercmd);
-                }
-                else {
+                    tq = new OAIExplorerTestQuery(oaiURL, explorercmd);
+                } else {
                     // use the web service
-                    tq = new OAIExplorerTestQuery(new URL(baseurl), explorerurl);
+                    tq = new OAIExplorerTestQuery(oaiURL, explorerurl);
                 }
 
                 // create the Evaluator
@@ -458,13 +450,7 @@ public class HarvestValidater {
 
                 return results;
             }
-            catch (DOMException ex) {
-                throw new ProcessingException(ex);
-            }
-            catch (ParserConfigurationException ex) {
-                throw new ProcessingException(ex);
-            }
-            catch (TransformerException ex) {
+            catch (DOMException | TransformerException | ParserConfigurationException ex) {
                 throw new ProcessingException(ex);
             }
             finally {
@@ -480,22 +466,8 @@ public class HarvestValidater {
             DocumentBuilder db = df.newDocumentBuilder();
             return db.parse(new FileInputStream(docfile));
         }
-        catch (SAXException ex) {
+        catch (SAXException | IOException | ParserConfigurationException ex) {
             throw new ProcessingException(ex);
-        }
-        catch (IOException ex) {
-            throw new ProcessingException(ex);
-        }
-        catch (ParserConfigurationException ex) {
-            throw new ProcessingException(ex);
-        }
-    }
-
-    protected void passThru(InputStream is, OutputStream os) throws IOException {
-        byte[] buffer = new byte[16*1024];
-        int n = 0;
-        while ((n = is.read(buffer)) >= 0) {
-            os.write(buffer, 0, n);
         }
     }
 
@@ -508,7 +480,7 @@ public class HarvestValidater {
      * validation.  
      * @param listener   a listener that will be notified of progress
      */
-    public Document validateIVOAHarvest(ValidaterListener listener, Map status) 
+    public Document validateIVOAHarvest(ValidaterListener listener, Map<String, Object> status)
         throws TestingException, IOException 
     {
         int count = 0, ntests = 0;
@@ -518,10 +490,8 @@ public class HarvestValidater {
             resultsfile = new File(cacheDir, nm("HarvestValResultsFile"));
         }
 
-        String id = null;
         if (listener != null) {
             status = setIVOAStatus(status);
-            id = (String) status.get("id");
         }
 
         if (isValidating(IVOA)) 
@@ -556,14 +526,14 @@ public class HarvestValidater {
                 setForXMLValidation(eval.getDocumentBuilderFactory());
 
                 if (listener != null) 
-                    status.put("totalQueryCount", new Integer(queries.size()));
+                    status.put("totalQueryCount", queries.size());
 
                 // create a TestQuery template
                 HTTPGetTestQuery tq = new HTTPGetTestQuery(baseurl+'?', 
                                                            evalprops);
                 tq.setResultTypes(defResultTypes.getTypes());
                 tq.setEvalProperty("rightnow", rightNow());
-                ListIterator it = queries.listIterator();
+                ListIterator<HTTPGetTestQuery.QueryData> it = queries.listIterator();
 
                 if (! it.hasNext()) 
                     throw new ConfigurationException("no queries configured");
@@ -605,15 +575,15 @@ public class HarvestValidater {
                         count += ntests;
                         if (status != null) {
                             status.put("ok", Boolean.TRUE);
-                            status.put("queryTestCount", new Integer(ntests));
-                            status.put("totalTestCount", new Integer(count));
+                            status.put("queryTestCount", ntests);
+                            status.put("totalTestCount", count);
                         }
                     }
                     catch (ConfigurationException ex) {
                         String message = "Internal Validater Error: "+ 
                             ex.getMessage();
                         complain(message);
-                        ex.printStackTrace();
+                        ex.printStackTrace(System.err);
 
                         message += 
                             " (Please report to validater service provider.)";
@@ -659,37 +629,37 @@ public class HarvestValidater {
                     }
 
                     // pull out some info needed for upcoming tests
-                    Element tqresults = eval.getLastChildElement(results);
+                    Element tqresults = EvaluatorBase.getLastChildElement(results);
                     String attval = tqresults.getAttribute("regid");
-                    if (attval != null && attval.length() > 0) 
+                    if (!attval.isEmpty())
                         tq.setEvalProperty("registryID", attval.trim());
 
                     attval = tqresults.getAttribute("manAuthIDs");
-                    if (attval != null && attval.length() > 0) 
+                    if (!attval.isEmpty())
                         tq.setEvalProperty("managedAuthorityIDs", attval.trim());
 
                     if (tq.getName().equals("ListRecords")) {
                         // note that we have seen the Registry record within 
                         // ListRecords
                         attval = tqresults.getAttribute("seenRegistryRec");
-                        if (attval != null && attval.length() > 0) 
+                        if (!attval.isEmpty())
                             tq.setEvalProperty("seenRegistryRecord", 
                                                attval.trim());
 
                         // save the authority IDs we have encountered so far ...
                         attval = tqresults.getAttribute("foundAuthIDs");
-                        if (attval != null && attval.length() > 0) 
+                        if (!attval.isEmpty())
                             tq.setEvalProperty("foundAuthorityIDs", 
                                                attval.trim());
 
                         // save the authority IDs that have been declared ...
                         attval = tqresults.getAttribute("declAuthIDs");
-                        if (attval != null && attval.length() > 0) 
+                        if (!attval.isEmpty())
                             tq.setEvalProperty("declaredAuthorityIDs", 
                                                attval.trim());
 
                         attval = tqresults.getAttribute("resumptionToken");
-                        if (attval != null && attval.length() > 0) {
+                        if (!attval.isEmpty()) {
                             // we need to get more records; slip in another test
                             HTTPGetTestQuery.QueryData resume = 
                                 new HTTPGetTestQuery.QueryData("ListRecords",
@@ -717,13 +687,7 @@ public class HarvestValidater {
 
                 return resdoc;
             }
-            catch (DOMException ex) {
-                throw new ProcessingException(ex);
-            }
-            catch (ParserConfigurationException ex) {
-                throw new ProcessingException(ex);
-            }
-            catch (TransformerException ex) {
+            catch (DOMException | TransformerException | ParserConfigurationException ex) {
                 throw new ProcessingException(ex);
             }
             finally {
@@ -760,7 +724,7 @@ public class HarvestValidater {
      *                       VOResources.  Note that all records will be checked
      *                       and their results cached regardless.  
      */
-    public Document validateVOResources(ValidaterListener listener, Map status,
+    public Document validateVOResources(ValidaterListener listener, Map<String, Object> status,
                                         int includeMax) 
         throws TestingException, IOException, InterruptedException
     {
@@ -778,14 +742,12 @@ public class HarvestValidater {
         String vorbase = nm("VORRecordBase");
         
         // stats we will keep track of
-        int count = 0, ntests = 0, nrecs = 0;
+        int nrecs;
         if (includeMax < 0) includeMax = Integer.MAX_VALUE;
 
         // setup for tracking status
-        String id = null;
         if (listener != null) {
             status = setStatus(status);
-            id = (String) status.get("id");
         }
         
         if (isValidating(VOR)) 
@@ -835,15 +797,14 @@ public class HarvestValidater {
                 if (Thread.interrupted()) throw new 
                     InterruptedException("Validation shutdown requested");
 
-                DocumentIterator di = null;
-                boolean cachevors = false;
+                DocumentIterator di;
 
                 // gain access to the individual VOResource records either 
                 // via the cache or directly from the registry.
                 if (cacheDir == null) {
                     // we're not caching anything
                     HarvestRecordServer h = 
-                        new HarvestRecordServer(new URL(baseurl));
+                        new HarvestRecordServer(URI.create(baseurl).toURL());
                     di = h.records();
                 }
                 else {
@@ -855,7 +816,7 @@ public class HarvestValidater {
                     if (listrecords == null) {
                         // harvest the VOResource records directly from the 
                         // registry
-                        Harvester h = new Harvester(new URL(baseurl));
+                        Harvester h = new Harvester(URI.create(baseurl).toURL());
                         h.harvestToDir(resourceDir, vorbase);
                     }
                     else {
@@ -866,7 +827,7 @@ public class HarvestValidater {
                     VOResourceCache vorc = new VOResourceCache(resourceDir);
                     vorc.setDocumentBuilder(makeVOResourceParser(pe));
                     if (status != null) 
-                        status.put("totalQueryCount", new Integer(vorc.size()));
+                        status.put("totalQueryCount", vorc.size());
                     di = vorc.records();
                 }
 
@@ -885,14 +846,13 @@ public class HarvestValidater {
                     recresult.appendChild(root);
 
                     try {
-                        ntests = eval.applyTests(vor, tq, root);
-                        count += ntests;
+                        eval.applyTests(vor, tq, root);
                     }
                     catch (ConfigurationException ex) {
                         String message = "Internal Validater Error: "+ 
                             ex.getMessage();
                         complain(message);
-                        ex.printStackTrace();
+                        ex.printStackTrace(System.err);
 
                         message += 
                             " (Please report to validater service provider.)";
@@ -923,7 +883,7 @@ public class HarvestValidater {
                         }
                     }
 
-                    Element te = eval.getLastChildElement(root);
+                    Element te = EvaluatorBase.getLastChildElement(root);
                     pe.insertErrors(te, te.getFirstChild(),
                                     recresult.createTextNode("\n    "));
                     pe.clear();
@@ -973,19 +933,8 @@ public class HarvestValidater {
 
                 return out;
             }
-            catch (DOMException ex) {
-                throw new ProcessingException(ex);
-            }
-            catch (SAXException ex) {
-                throw new ProcessingException(ex);
-            }
-            catch (ParserConfigurationException ex) {
-                throw new ProcessingException(ex);
-            }
-            catch (TransformerException ex) {
-                throw new ProcessingException(ex);
-            }
-            catch (HarvestingException ex) {
+            catch (DOMException | SAXException | ParserConfigurationException | TransformerException
+                   | HarvestingException ex) {
                 throw new ProcessingException(ex);
             }
             finally {
@@ -1006,7 +955,6 @@ public class HarvestValidater {
         throws ParserConfigurationException
     {
         Document out = df.newDocumentBuilder().newDocument();
-//         out.appendChild(out.createTextNode("\n"));
         Element root = out.createElement(resultRootName);
         out.appendChild(root);
         root.setAttribute("baseURL", baseurl);
@@ -1022,12 +970,9 @@ public class HarvestValidater {
     public Document validate(int maxVORInclude, ValidaterListener listener) 
         throws TestingException, IOException, InterruptedException
     {
-        NodeList children = null;
-        int i = 0;
+        Map<String, Object> status = setStatus(null);
 
-        Map status = setStatus(null);
-
-        Document out = null;
+        final Document out;
         try {
             out = createResultsWrapperDocument();
         }
@@ -1069,18 +1014,16 @@ public class HarvestValidater {
         }
 
         if (cacheDir != null) {
-	    OutputStream os = null;
-            try {
-                os = new FileOutputStream(new File(cacheDir,"Results.xml"));
-                Transformer printer = tfact.newTransformer();
-                printer = tfact.newTransformer();
-                printer.transform(new DOMSource(out), new StreamResult(os));
+            try (OutputStream os = new FileOutputStream(new File(cacheDir, "Results.xml"))) {
+                try {
+                    Transformer printer = tfact.newTransformer();
+                    printer.transform(new DOMSource(out), new StreamResult(os));
+                } catch (TransformerException ex) {
+                    throw new ProcessingException(ex);
+                }
+            } catch (IOException ioex) {
+                // ignore
             }
-            catch (TransformerException ex) {
-                throw new ProcessingException(ex);
-            } finally {
-		try { os.close(); } catch (IOException ioex) { }
-	    }
         }
 
         return out;
@@ -1089,11 +1032,7 @@ public class HarvestValidater {
     Pattern identifyPat = Pattern.compile(".*\\d-Identify.xml");
     private void cacheRegistryRecord() throws IOException, HarvestingException {
         if (cacheDir != null) {
-            File[] files = cacheDir.listFiles(new FilenameFilter() {
-                public boolean accept(File dir, String name) {
-                    return identifyPat.matcher(name).matches();
-                }
-            });
+            File[] files = cacheDir.listFiles((dir, name) -> identifyPat.matcher(name).matches());
 
             if (files == null || files.length == 0) {
                 complain("Identify records missing from cache!");
@@ -1108,7 +1047,7 @@ public class HarvestValidater {
                 FileWriter out = 
                     new FileWriter(new File(cacheDir, nm("RegResourceFile")));
                 char[] buf = new char[16*1024];
-                int n = 0;
+                int n;
 
                 while ((n = vor.read(buf)) >= 0) {
                     out.write(buf, 0, n);
@@ -1125,7 +1064,7 @@ public class HarvestValidater {
      */
     private boolean addAssessment(Element root) throws ProcessingException {
         int nf = 0, nw = 0, nr = 0;
-        String show = null;
+        String show;
         boolean good = true;
         try {
             Node child = root.getFirstChild();
@@ -1135,7 +1074,7 @@ public class HarvestValidater {
                     category = (Element) child;
                     int n = 0;
                     String nc = category.getAttribute("nfail");
-                    if (nc == null || nc.length() == 0) { 
+                    if (nc.isEmpty()) {
                         addStats(category);
                         nc = category.getAttribute("nfail");
                     }
@@ -1152,9 +1091,9 @@ public class HarvestValidater {
                 child = child.getNextSibling();
             }
 
-            root.setAttribute("nfail", (new Integer(nf)).toString());
-            root.setAttribute("nwarn", (new Integer(nw)).toString());
-            root.setAttribute("nrec",  (new Integer(nr)).toString());
+            root.setAttribute("nfail", Integer.toString(nf));
+            root.setAttribute("nwarn", Integer.toString(nw));
+            root.setAttribute("nrec",  Integer.toString(nr));
 
             if ((notGoodEnough & ResultTypes.FAIL) > 0 && nf != 0) good = false;
             if ((notGoodEnough & ResultTypes.WARN) > 0 && nw != 0) good = false;
@@ -1183,7 +1122,7 @@ public class HarvestValidater {
         if (cacheDir == null) 
             throw new ConfigurationException("No cache directory set");
 
-        Map status = setStatus(null);
+        final Map<String, Object> status = setStatus(null);
 
         validateOAI(listener, status);
         validateIVOAHarvest(listener, status);
@@ -1194,10 +1133,8 @@ public class HarvestValidater {
     }
 
     private void setForXMLValidation(DocumentBuilderFactory fact) {
-        if (builtinSchemas)
-          ValidationUtils.setForXMLValidation(fact, null);
-        else
-          ValidationUtils.setForXMLValidation(fact, sl);
+        LOGGER.info("Setting up XML validation for VOResource parsing (builtin schemas: " + builtinSchemas + ")");
+        ValidationUtils.setForXMLValidation(fact, builtinSchemas ? sl : null);
     }
 
     private DocumentBuilder makeVOResourceParser(ParsingErrors pe) 
@@ -1253,7 +1190,7 @@ public class HarvestValidater {
     protected String addCommFailure(Element root, TestQuery tq, Exception ex) 
          throws DOMException
     {
-        Class excl = ex.getClass();
+        Class<?> excl = ex.getClass();
         String exname = excl.getName().substring(
                                      excl.getPackage().getName().length()+1);
 
@@ -1282,19 +1219,8 @@ public class HarvestValidater {
      * fill out a new status map for tracking progress of VOResource 
      * record validation 
      */
-    private Map setVORStatus(Map out) {
-        out = setOAIStatus(out);
-        out.put("nextQueryName", "VOResource compliance");
-        out.put("lastID", "");
-        return out;
-    }
-
-    /*
-     * fill out a new status map for tracking progress of VOResource 
-     * record validation 
-     */
-    private Map setIVOAStatus(Map out) {
-        Map newmap = statushelper.newStatus();
+    private Map<String, Object> setIVOAStatus(Map<String, Object> out) {
+        Map<String, Object> newmap = statushelper.newStatus();
         if (out == null) {
             out = newmap;
         }
@@ -1309,48 +1235,24 @@ public class HarvestValidater {
         return out;
     }
 
-    /*
-     * fill out a new status map for tracking progress of OAI
-     * validation 
-     */
-    private Map setOAIStatus(Map out) {
-        Integer zero = new Integer(0);
-        String empty = "";
-        if (out == null) out = new HashMap(5);
-
-        if (! out.containsKey("id")) out.put("id", StatusHelper.newID());
-        out.put("done", Boolean.FALSE);
-        out.put("ok", Boolean.TRUE);
-        out.put("message", empty);
-        out.put("nextQueryName", "OAI compliance");
-        out.put("lastQueryName", empty);
-
-        return out;
-    }
-
     private void extractFromListRecords(File[] listrecs, File outdir, 
                                         String base)
         throws HarvestingException, IOException
     {
-        Reader vor = null;
-        FileWriter out = null;
-        VOResourceExtractor pullout = null;
-        StringBuffer file = null;
+        Reader vor;
         char[] buf = new char[16*1024];
-        int i=0, j=0, n=0;
+        int i, j=0, n;
 
-        for(i=0; i < listrecs.length; i++) {
-            pullout = new VOResourceExtractor(new FileReader(listrecs[i]));
+        for (i = 0; i < listrecs.length; i++) {
+            final VOResourceExtractor pullout = new VOResourceExtractor(new FileReader(listrecs[i]));
             while ((vor = pullout.nextReader()) != null) {
-                file = new StringBuffer(base);
-                file.append('_').append(++j).append(".xml");
-                out = new FileWriter(new File(outdir, file.toString()));
-
-                while ((n = vor.read(buf)) >= 0) {
-                    out.write(buf, 0, n);
+                try (final FileWriter out = new FileWriter(new File(outdir, base + '_' + ++j + ".xml"))) {
+                    while ((n = vor.read(buf)) >= 0) {
+                        out.write(buf, 0, n);
+                    }
+                    out.flush();
+                    vor.close();
                 }
-                out.close();
-                vor.close();
             }
         }
     }
@@ -1362,19 +1264,6 @@ public class HarvestValidater {
                     return listRecordPat.matcher(name).matches();
                 }
             });
-    }
-
-    private void tellProgress(ValidaterListener listener, Map status, 
-                              String state, String message) 
-    {
-        if (listener == null) return;
-
-        String id = (String) status.get("id");
-
-        status.put("status", state);
-        status.put("message", message);
-
-        listener.progressUpdated(id, "done".equals(state), status);
     }
 
     private String extractID(Document voresource, Element valresults) {
@@ -1389,7 +1278,9 @@ public class HarvestValidater {
                 Element id = (Element) ids.item(0);
                 id.normalize();
                 try { ivoid = ((Text) id.getFirstChild()).getData().trim(); }
-                catch (Exception ex) { }
+                catch (Exception ex) {
+                    // ignore
+                }
             }
         }
 
@@ -1403,8 +1294,8 @@ public class HarvestValidater {
     public static String idToFilename(String id) {
         return pid2.matcher(pid1.matcher(id).replaceFirst("")).replaceAll("_");
     }
-    private static Pattern pid1 = Pattern.compile("^\\w+://");
-    private static Pattern pid2 = Pattern.compile("/");
+    private static final Pattern pid1 = Pattern.compile("^\\w+://");
+    private static final Pattern pid2 = Pattern.compile("/");
 
     private String renameVOR(File dir, String id, String filename) {
         String newname = filename;
@@ -1423,7 +1314,7 @@ public class HarvestValidater {
         return newname;
     }
 
-    private void tellVOR(ValidaterListener listener, Map status, 
+    private void tellVOR(ValidaterListener listener, Map<String, Object> status,
                          Document voresource, Element valresults)
     {
         if (listener == null) return;
@@ -1447,12 +1338,13 @@ public class HarvestValidater {
         status.put("lastQueryName", ivoid);
         status.put("rstatus", rstatus);
         String[] cat = { "fail", "warn", "rec" };
-        for(int i=0; i < cat.length; i++) {
-            try { 
-                int n = Integer.parseInt(valresults.getAttribute("n"+cat[i]));
-                status.put(cat[i], new Integer(n));
+        for (String s : cat) {
+            try {
+                final int n = Integer.parseInt(valresults.getAttribute("n" + s));
+                status.put(s, n);
+            } catch (NumberFormatException ex) {
+                // Do nothing.
             }
-            catch (NumberFormatException ex) { }
         }
 
         tellProgress(listener, status, "completed", ivoid, 
@@ -1473,35 +1365,26 @@ public class HarvestValidater {
                 nr++;
         }
 
-        te.setAttribute("nfail", (new Integer(nf)).toString());
-        te.setAttribute("nwarn", (new Integer(nw)).toString());
-        te.setAttribute("nrec",  (new Integer(nr)).toString());
+        te.setAttribute("nfail", Integer.toString(nf));
+        te.setAttribute("nwarn", Integer.toString(nw));
+        te.setAttribute("nrec",  Integer.toString(nr));
 
         return Math.max(nf, Math.max(nw, nr));
     }
 
-    private Element getTestElement(Element parent) {
-        Node child = parent.getLastChild();
-        while (child != null && child.getNodeType() != Node.ELEMENT_NODE) {
-            child = child.getPreviousSibling();
-        }
-
-        return ((Element) child);
-    }
-
     private String nm(String key) {  return names.getProperty(key);  }
 
-    protected void tellIVOAProgress(ValidaterListener listener, Map status, 
+    protected void tellIVOAProgress(ValidaterListener listener, Map<String, Object> status,
                                     String state, String query, String desc) 
     {
-        StringBuffer sb = new StringBuffer(query);
-        if (desc != null && desc.length() > 0)
+        StringBuilder sb = new StringBuilder(query);
+        if (desc != null && !desc.isEmpty())
             sb.append(" (").append(desc).append(")");
         sb.append(' ').append(state).append('.');
         tellProgress(listener, status, state, query, sb.toString());
     }
 
-    protected void tellProgress(ValidaterListener listener, Map status, 
+    protected void tellProgress(ValidaterListener listener, Map<String, Object> status,
                                 String state, String query, String message) 
     {
         if (listener == null) return;
@@ -1515,10 +1398,9 @@ public class HarvestValidater {
         listener.progressUpdated(id, "done".equals(state), status);
     }
 
-    private Map setStatus(Map out) {
-        Integer zero = new Integer(0);
+    private Map<String, Object> setStatus(Map<String, Object> out) {
         String empty = "";
-        if (out == null) out = new HashMap(5);
+        if (out == null) out = new HashMap<>(5);
 
         if (! out.containsKey("id")) out.put("id", StatusHelper.newID());
         out.put("done", Boolean.FALSE);
@@ -1533,17 +1415,14 @@ public class HarvestValidater {
     private boolean hasTokens(String show, int flags) {
         if (show == null) return false;
 
-        if ((flags & ResultTypes.FAIL) > 0 && 
-            show.indexOf(defResultTypes.getToken(ResultTypes.FAIL)) < 0)
+        if ((flags & ResultTypes.FAIL) > 0 &&
+                !show.contains(defResultTypes.getToken(ResultTypes.FAIL)))
           return false;
-        if ((flags & ResultTypes.WARN) > 0 && 
-            show.indexOf(defResultTypes.getToken(ResultTypes.WARN)) < 0)
+        if ((flags & ResultTypes.WARN) > 0 &&
+                !show.contains(defResultTypes.getToken(ResultTypes.WARN)))
           return false;
-        if ((flags & ResultTypes.REC) > 0 && 
-            show.indexOf(defResultTypes.getToken(ResultTypes.REC)) < 0)
-          return false;
-
-        return true;
+        return (flags & ResultTypes.REC) <= 0 ||
+                show.contains(defResultTypes.getToken(ResultTypes.REC));
     }
 
     /*

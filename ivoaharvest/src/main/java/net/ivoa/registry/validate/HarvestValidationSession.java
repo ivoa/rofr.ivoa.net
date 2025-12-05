@@ -15,6 +15,7 @@ import org.nvo.service.validation.webapp.InternalServerException;
 import org.nvo.service.validation.webapp.BadRequestException;
 import org.nvo.service.validation.webapp.UnavailableSessionException;
 
+import java.nio.file.Path;
 import java.util.Properties;
 import java.util.Hashtable;
 import java.util.HashMap;
@@ -836,20 +837,18 @@ public class HarvestValidationSession extends ValidationSessionBase
     }
 
     protected Transformer getTransformerForFormat(String format) 
-         throws FileNotFoundException, IOException,
-                TransformerConfigurationException
+         throws IOException, TransformerConfigurationException
     {
-        if (format != null && format.length() == 0) format = null;
+        if (format != null && format.isEmpty()) format = null;
         if (format == null) return null;
 
         Templates stylesheet = (Templates) templates.get(format);
         if (stylesheet == null) {
-            String ssfile = config.getParameter("resultStylesheet", "format",
-                                                format); 
+            String ssfile = config.getParameter(Path.of("resultStylesheet", "format", format).toString());
             if (ssfile == null && "xml".equals(format)) ssfile = "";
             if (ssfile == null) return null;
 
-            if (ssfile.length() == 0) return tf.newTransformer();
+            if (ssfile.isEmpty()) return tf.newTransformer();
 
             stylesheet = tf.newTemplates(
                new StreamSource(Configuration.openFile(ssfile, this.getClass()))

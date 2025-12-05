@@ -12,6 +12,7 @@ import java.io.FileInputStream;
 import java.io.InputStream;
 import java.io.BufferedReader;
 import java.io.IOException;
+import java.util.Objects;
 import java.util.Properties;
 import java.util.Set;
 import java.util.HashSet;
@@ -23,18 +24,20 @@ import static org.junit.Assert.*;
 
 public class RecordResponseProcessorTest {
 
-    static final String listrec1 = "first-listrecs.xml";
-    static final String listrec2 = "rofr-listrecs.xml";
-    static final String getrec = "rofr-getrecs.xml";
-    static final String tmppath = System.getProperty("test.tmpdir", "/tmp");
+    static final String listrec1 = "/first-listrecs.xml";
+    static final String listrec2 = "/rofr-listrecs.xml";
+    static final String getrec = "/rofr-getrecs.xml";
+    static final String tmppath = System.getProperty("java.io.tmpdir", "/tmp");
     static final File tmpdir = new File(tmppath);
 
     @Test
     public void testProcess() throws HarvestingException, IOException {
         Consumer consumer = new Consumer();
-        RecordResponseProcessor p = new RecordResponseProcessor(consumer);
-        ResumptionToken r = 
-            p.process(getClass().getResourceAsStream(listrec1), 1);
+        final RecordResponseProcessor p = new RecordResponseProcessor(consumer);
+        final InputStream inputStream =
+                Objects.requireNonNull(RecordResponseProcessorTest.class.getResourceAsStream(listrec1),
+                        "Input stream for listrec1 is null");
+        ResumptionToken r = p.process(inputStream, 1);
         assertEquals(2, consumer.deleted.size());
         assertEquals(2, consumer.updated.size());
         assertNotNull(r);
@@ -114,9 +117,9 @@ public class RecordResponseProcessorTest {
         assertEquals(1, listener.page);
     }
 
-    class Listener implements HarvestListener {
-        Set<String> current = new HashSet<String>();
-        Set<String> deleted = new HashSet<String>();
+    static class Listener implements HarvestListener {
+        Set<String> current = new HashSet<>();
+        Set<String> deleted = new HashSet<>();
         String respdate = null;
         String url = null;
         String name = null;
@@ -133,15 +136,17 @@ public class RecordResponseProcessorTest {
         }
         public void harvestInfo(int page,String id,String itemName,String value){
             if (page > this.page) this.page = page;
-            if (itemName.equals(RESPONSE_DATE)) respdate = value;
-            else if (itemName.equals(REQUEST_URL)) url = value;
-            else if (itemName.equals(REGISTRY_NAME)) name = value;
-            else if (itemName.equals(HARVEST_COMPLETE)) completed = value;
-            else if (itemName.equals(RECORD_STATUS)) {
-                if (value.equals("deleted"))
-                    deleted.add(id);
-                else 
-                    current.add(id);
+            switch (itemName) {
+                case RESPONSE_DATE -> respdate = value;
+                case REQUEST_URL -> url = value;
+                case REGISTRY_NAME -> name = value;
+                case HARVEST_COMPLETE -> completed = value;
+                case RECORD_STATUS -> {
+                    if (value.equals("deleted"))
+                        deleted.add(id);
+                    else
+                        current.add(id);
+                }
             }
         }
     }
@@ -159,10 +164,9 @@ public class RecordResponseProcessorTest {
         assertNull(r);
     }
 
-    class Consumer implements HarvestConsumer {
-        Set<String> updated = new HashSet<String>();
-        Set<String> deleted = new HashSet<String>();
-        boolean withhinfo = false;
+    static class Consumer implements HarvestConsumer {
+        Set<String> updated = new HashSet<>();
+        Set<String> deleted = new HashSet<>();
         ResourcePeeker peeker = null;
 
         Consumer() { this(false); }
@@ -215,32 +219,4 @@ public class RecordResponseProcessorTest {
         @Override
         public boolean canRestart() { return false; }
     }
-
-    public void processFile(String filename) 
-        throws HarvestingException, IOException 
-    {
-        Properties hinfo = new Properties();
-        hinfo.setProperty("from.ep", "http://stsci/oai");
-        RecordResponseProcessor proc = 
-            new RecordResponseProcessor(new Consumer(true), hinfo);
-        InputStream resp = new FileInputStream(filename);
-        proc.process(resp, 1);
-        resp.close();
-    }
-
-    public static void main(String[] args) {
-        RecordResponseProcessorTest test = new RecordResponseProcessorTest();
-        try {
-            //test.testHarvestInfo();
-            //test.testProcess();
-            //test.testListener();
-
-            test.processFile(args[0]);
-        }
-        catch (Exception ex) {
-            System.err.println(ex.getMessage());
-            ex.printStackTrace();
-        }
-    }
-
 }

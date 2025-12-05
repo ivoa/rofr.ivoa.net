@@ -3,7 +3,7 @@
            xmlns:xs="http://www.w3.org/2001/XMLSchema" 
            xmlns:vr="http://www.ivoa.net/xml/VOResource/v1.0" 
            xmlns:vs="http://www.ivoa.net/xml/VODataService/v1.1" 
-           xmlns:stc="http://www.ivoa.net/xml/STC/stc-v1.30.xsd" 
+           xmlns:stc="stc-v1.xsd"
            xmlns:vm="http://www.ivoa.net/xml/VOMetadata/v0.1"
            elementFormDefault="unqualified" attributeFormDefault="unqualified"
            version="1.1wd2">
@@ -22,8 +22,8 @@
 
    <xs:import namespace="http://www.ivoa.net/xml/VOResource/v1.0"
       schemaLocation="http://www.ivoa.net/xml/VOResource/v1.0"/>
-   <xs:import namespace="http://www.ivoa.net/xml/STC/stc-v1.30.xsd"
-      schemaLocation="http://www.ivoa.net/xml/STC/stc-v1.30.xsd"/>
+   <xs:import namespace="stc-v1.xsd"
+      schemaLocation="stc-v1.xsd"/>
 
    <xs:complexType name="DataCollection">
       <xs:annotation>
