@@ -11,9 +11,9 @@ import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.io.IOException;
 
-import javax.xml.soap.SOAPConnection;
-import javax.xml.soap.SOAPMessage;
-import javax.xml.soap.SOAPException;
+import jakarta.xml.soap.SOAPConnection;
+import jakarta.xml.soap.SOAPMessage;
+import jakarta.xml.soap.SOAPException;
 import org.w3c.dom.Element;
 
 /**

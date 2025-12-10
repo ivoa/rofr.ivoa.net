@@ -135,7 +135,7 @@ public interface OnDemandParser {
      *                  value or empty set resets the selection such that 
      *                  all attributes will be loaded.
      */
-    public void loadAttributes(String s, Set set);
+    public void loadAttributes(String s, Set<String> set);
 
     /**
      * resume loading all attributes during element events.  This discards

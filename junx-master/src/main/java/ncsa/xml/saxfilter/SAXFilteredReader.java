@@ -43,19 +43,19 @@ import org.xml.sax.helpers.AttributesImpl;
 public class SAXFilteredReader extends Reader {
     private ContentHandler chandler = null;
     private PushbackReader src = null;
-    private TextBuffer buf = new TextBuffer();
-    private OnDemandParserDelegate evts = new OnDemandParserDelegate();
-    private CharLocator loc = new CharLocator();
+    private final TextBuffer buf = new TextBuffer();
+    private final OnDemandParserDelegate evts = new OnDemandParserDelegate();
+    private final CharLocator loc = new CharLocator();
     private boolean strict = false;
     private boolean eof = false;
     private boolean started = false;
     private boolean parseAhead = false;
 
     // the trail of breadcrumbs indicating where flow should be turned on/off
-    private SkipSchedule skip = new SkipSchedule(false);
+    private final SkipSchedule skip = new SkipSchedule(false);
 
     // the stack of input sources 
-    Stack srcstack = null;
+    Stack<PushbackReader> srcstack = null;
 
     // the position relative to the start of the document of the beginning
     // of the characters in the TextBuffer
@@ -69,20 +69,13 @@ public class SAXFilteredReader extends Reader {
     //        unparsed characters were last retrieved.  
     private int sent=0, parsed=0, cursor=0;
 
-    // the pending-parsed position.  This is set before any call to a 
-    // ContentHandler method to the value parsed will have immediately after
-    // that method returns.  It is the effective parsed position from the
-    // perspective of the ContentHandler method.  In other words, this will
-    // set to the end of the range of characters sent to a ContentHandler
-    // method.  
-    private int pending = parsed;
 
     private ParseRequestMgr prq = null;
-    private NamespaceMap namespaces = new NamespaceMap();
+    private final NamespaceMap namespaces = new NamespaceMap();
 
     private PauseMarkers pmarks = null;
     private char pausechar = '\004';
-    private char[] cb = new char[1];
+    private final char[] cb = new char[1];
     private boolean addpause = false;
 
     /**
@@ -230,7 +223,7 @@ public class SAXFilteredReader extends Reader {
      * Read characters into a portion of an array.  If a content handler 
      * is set, the characters will trigger SAX events.
      */
-    public synchronized int read(char chars[], int off, int len)
+    public synchronized int read(char[] chars, int off, int len)
         throws IOException
     {
         if (src == null)
@@ -282,8 +275,7 @@ public class SAXFilteredReader extends Reader {
 //            if (need == len) throw new EOFException();
 //            else if (need > 0) eof = true;
 
-            if (eof && chandler != null && evts.isEnabled(evts.DOCUMENT)) {
-                pending = parsed;
+            if (eof && chandler != null && evts.isEnabled(OnDemandParser.DOCUMENT)) {
                 chandler.endDocument();
             }
         } catch (SAXException ex) {
@@ -298,7 +290,6 @@ public class SAXFilteredReader extends Reader {
         }
 
         sendable = len-need;
-//         if (sendable == 0) sendable = -1;
         return sendable;
     }
 
@@ -317,12 +308,7 @@ public class SAXFilteredReader extends Reader {
     }
 
     // a buffer for reading characters from the source stream
-    private char[] cbuf = new char[128];
-
-    // lip = the position of the offset in the current Substring relative 
-    //       to the beginning of the TextBuffer.
-    // lilen = the length of the current Substring
-    private int lip = 0, lilen = 0;
+    private final char[] cbuf = new char[128];
 
     public static final String COMMENT_START = "<!--";
     public static final String COMMENT_END = "-->";
@@ -344,8 +330,7 @@ public class SAXFilteredReader extends Reader {
         if (parsed - sent > nchars) return parsed - sent;
 
         if (!started) {
-            pending = parsed;
-            if (chandler != null && evts.isEnabled(evts.DOCUMENT)) 
+            if (chandler != null && evts.isEnabled(OnDemandParser.DOCUMENT))
                 chandler.startDocument();
             started = true;
         }
@@ -353,7 +338,6 @@ public class SAXFilteredReader extends Reader {
         // first shift off the characters no longer needed in the buffer
         trimBuffer();
 
-        String use = null;
         Substring sub = getSubstring(parsed);
         if (sub == null) return parsed - sent;
 
@@ -369,11 +353,11 @@ public class SAXFilteredReader extends Reader {
         while (parsed-sent < nchars || parseAhead) {
 
             // parse and process
-            p = sub.str().indexOf('<', lp);
+            p = (sub != null ? sub.str().indexOf('<', lp) : 0);
             if (p >= 0) {
 
                 // process any text nodes
-                if (p > 0 && evts.isEnabled(evts.CHARACTERS)) {
+                if (p > 0 && evts.isEnabled(OnDemandParser.CHARACTERS)) {
                     try {
                         handleChars(parsed, p - lp, true);
                     } catch(SAXException ex) {
@@ -383,16 +367,16 @@ public class SAXFilteredReader extends Reader {
                     // handler may have changed size of buffer; use global
                     // vars (updated by handler) to reset local markers.
                     sub = getSubstring(cursor);
-                    lp = parsed - cursor + sub.off;
+                    lp = parsed - cursor + (sub != null ? sub.off : 0);
                     p = lp + loc.getCharLength();
-                    if (sub.str().charAt(p) != '<')
+                    if (sub != null && sub.str().charAt(p) != '<')
                         throw new SAXException("stream manipulation broke " +
                                                "XML validity");
                 }
                 parsed += p - lp;  // move pointers past text (to '<')
                 lp = p;
 
-                if (sub.str().startsWith(COMMENT_START, p)) {
+                if (sub != null && sub.str().startsWith(COMMENT_START, p)) {
 
                     // found a comment; advance to the end of it
                     p = sub.str().indexOf(COMMENT_END, p);
@@ -419,7 +403,7 @@ public class SAXFilteredReader extends Reader {
                     lp = p;
                     if (sub == null) break;
                 } 
-                else if (sub.str().startsWith(PROC_INSTR_START, p)) {
+                else if (sub != null && sub.str().startsWith(PROC_INSTR_START, p)) {
 
                     // found a processing instruction
                     p = sub.str().indexOf(PROC_INSTR_END, p);
@@ -433,7 +417,7 @@ public class SAXFilteredReader extends Reader {
                         p = 0;
                     else
                         p += PROC_INSTR_END.length();
-                    if (evts.isEnabled(evts.PROC_INSTR)) {
+                    if (evts.isEnabled(OnDemandParser.PROC_INSTR)) {
                         try {
                             handleProcInstr(parsed, p - lp);
                         } catch(SAXException ex) {
@@ -445,14 +429,14 @@ public class SAXFilteredReader extends Reader {
                         // handler may have changed size of buffer; use global
                         // vars (updated by handler) to reset local markers.
                         sub = getSubstring(cursor);
-                        lp = parsed - cursor + sub.off;
+                        lp = parsed - cursor + (sub != null ? sub.off : 0);
                         p = lp + loc.getCharLength();
                     }
                     parsed += p - lp;  // move pointers past <?...?>
                     lp = p;
                     if (sub == null) break;
                 } 
-                else if (sub.str().startsWith(CDATA_START, p)) {
+                else if (sub != null && sub.str().startsWith(CDATA_START, p)) {
 
                     // found a CDATA section instruction
                     p = sub.str().indexOf(CDATA_END, p);
@@ -463,7 +447,7 @@ public class SAXFilteredReader extends Reader {
                         p = sub.str().indexOf(CDATA_END, sub.off);
                     } 
                     if (p < 0) p = 0;
-                    if (evts.isEnabled(evts.CHARACTERS)) {
+                    if (evts.isEnabled(OnDemandParser.CHARACTERS)) {
                         try {
                             handleChars(parsed+CDATA_START.length(), 
                                         p-lp, false);
@@ -476,7 +460,7 @@ public class SAXFilteredReader extends Reader {
                         // handler may have changed size of buffer; use global
                         // vars (updated by handler) to reset local markers.
                         sub = getSubstring(cursor);
-                        lp = parsed - cursor + sub.off;
+                        lp = parsed - cursor + (sub != null ? sub.off : 0);
                         p = lp + loc.getCharLength();
                     }
                     p += CDATA_END.length();
@@ -499,9 +483,9 @@ public class SAXFilteredReader extends Reader {
                         p = 0;
                     else
                         p += 1;
-                    if (tagtype != '!' && evts.anyEnabled(evts.ELEMENT|
-                                                          evts.ATTRIBUTES|
-                                                          evts.NAMESPACES)) 
+                    if (tagtype != '!' && evts.anyEnabled(OnDemandParser.ELEMENT|
+                                                          OnDemandParser.ATTRIBUTES|
+                                                          OnDemandParser.NAMESPACES))
                     {
                         try {
                             if (tagtype == '/') {
@@ -511,14 +495,12 @@ public class SAXFilteredReader extends Reader {
                             }
                         } catch(SAXException ex) {
                             if (strict) throw ex;
-//                             throw new IOException("SAX processing error: " + 
-//                                                   ex.getMessage());
                         }
 
                         // handler may have changed size of buffer; use global
                         // vars (updated by handler) to reset local markers.
                         sub = getSubstring(cursor);
-                        lp = parsed - cursor + sub.off;
+                        lp = parsed - cursor + (sub != null ? sub.off : 0);
                         p = lp + loc.getCharLength();
                     }
                     parsed += p - lp;
@@ -527,24 +509,21 @@ public class SAXFilteredReader extends Reader {
                 }
             } 
             else {
-                if (evts.isEnabled(evts.CHARACTERS) && 
+                if (evts.isEnabled(OnDemandParser.CHARACTERS) &&
                     lp < sub.str().length())
                 {
                     try {
                         handleChars(parsed, sub.str().length() - lp, true);
                     } catch(SAXException ex) {
                         if (strict) throw ex;
-//                             throw new IOException("SAX processing error: " + 
-//                                                   ex.getMessage());
                     }
 
                     // handler may have changed size of buffer; use global
                     // vars (updated by handler) to reset local markers.
                     sub = getSubstring(cursor);
-                    lp = parsed - cursor + sub.off;
-                    p = lp + loc.getCharLength();
+                    lp = parsed - cursor + (sub != null ? sub.off : 0);
                 }
-                p = sub.str().length();
+                p = (sub != null ? sub.str().length() : 0);
                 parsed += p - lp;
                 lp = p;
             }
@@ -554,11 +533,10 @@ public class SAXFilteredReader extends Reader {
             if ((parsed-sent < nchars || parseAhead) &&  // need more to send
                 (sub == null || p >= sub.str().length() || p < 0)) // sub used up
             {
-                lp -= sub.str().length();
+                lp -= (sub != null ? sub.str().length() : 0);
                 sub = nextSubstring();
                 if (sub == null) break;
-                p = sub.off;
-            } 
+            }
         }
 
         return parsed - sent;
@@ -676,9 +654,9 @@ public class SAXFilteredReader extends Reader {
             while (nl < 0) {
                 n = src.read(cbuf, 0, cbuf.length);
                 if (n < 0 && srcstack != null) {
-                    while (n < 0 && srcstack.size() > 0) {
+                    while (n < 0 && !srcstack.isEmpty()) {
                         src.close();
-                        src = (PushbackReader) srcstack.pop();
+                        src = srcstack.pop();
                         n = src.read(cbuf, 0, cbuf.length);
                     }
                 }
@@ -697,11 +675,9 @@ public class SAXFilteredReader extends Reader {
             buf.append(sb.toString());
             if (nl >= 0) {
                 src.unread(cbuf, nl+1, n-nl-1);
-            }
-            else if (n < cbuf.length) { 
+            } else {
                 eof = true;
                 break;
-//                return false;
             }
         }
 
@@ -716,26 +692,24 @@ public class SAXFilteredReader extends Reader {
      * @param whiteIgnorable  any surrounding white space can be ignored.  
      */
     void handleChars(int start, int len, boolean whiteIgnorable)
-        throws SAXException, IOException
+        throws SAXException
     {
         if (chandler == null) return;
         int l, m;
 
-        // update the locator
-        pending = parsed + len;
         loc.setChars(cpos + (long)start, len);
 
         // copy characters into an array
         char[] sb = new char[len];
-        ListIterator li = buf.getSubstring(start);
-        Substring sub = (Substring)li.next();
+        ListIterator<Substring> li = buf.getSubstring(start);
+        Substring sub = li.next();
         start = 0;
         l = Math.min(len, sub.str().length() - sub.off);
         while (len > 0) {
             sub.str().getChars(sub.off, sub.off + l, sb, start);
             len -= l;
             start += l;
-            if (len > 0) sub = (Substring) li.next();
+            if (len > 0) sub = li.next();
             l = Math.min(sub.off+len, sub.str().length());
         }
 
@@ -745,7 +719,8 @@ public class SAXFilteredReader extends Reader {
 
             // look for leading white space
             for(l = 0; l < sb.length && Character.isWhitespace(sb[l]); l++);
-            if (l > 0 && evts.isEnabled(evts.IGNORE_WHITE_SPACE)) 
+
+            if (l > 0 && evts.isEnabled(OnDemandParser.IGNORE_WHITE_SPACE))
                 chandler.ignorableWhitespace(sb, 0, l);
 
             // look for trailing white space
@@ -754,7 +729,7 @@ public class SAXFilteredReader extends Reader {
 
         if (l < m) {
             chandler.characters(sb, l, m - l);
-            if (m < sb.length && evts.isEnabled(evts.IGNORE_WHITE_SPACE)) 
+            if (m < sb.length && evts.isEnabled(OnDemandParser.IGNORE_WHITE_SPACE))
                 chandler.ignorableWhitespace(sb, m, sb.length - m);
         }
     }
@@ -762,13 +737,10 @@ public class SAXFilteredReader extends Reader {
     void handleProcInstr(int start, int len) throws SAXException, IOException {
         if (chandler == null) return;
         int l, m;
-
-        // update the locator
-        pending = parsed + len;
         loc.setChars(cpos+start, len);
 
-        ListIterator li = buf.getSubstring(start);
-        Substring sub = (Substring)li.next();
+        ListIterator<Substring> li = buf.getSubstring(start);
+        Substring sub = li.next();
         m = sub.off+PROC_INSTR_START.length();
         for(l=m+1; 
             l < sub.str().length() && 
@@ -777,32 +749,30 @@ public class SAXFilteredReader extends Reader {
         String target = sub.str().substring(m, l);
         len -= l-sub.off;
 
-        StringBuffer sb = new StringBuffer();
+        StringBuilder sb = new StringBuilder();
         while (len > 0)  {
             m = Math.min(sub.str().length(), l+len);
             len -= m - l;
             if (len <= 0) m -= PROC_INSTR_END.length();
-            sb.append(sub.str().substring(l, m));
+            sb.append(sub.str(), l, m);
         }
 
         chandler.processingInstruction(target, sb.toString());
     }
 
     void handleStartElement(int start, int len)
-        throws SAXException, IOException
+        throws SAXException
     {
         if (chandler == null) return;
 
-        // update the locator
-        pending = parsed + len;
         loc.setChars(cpos+start, len);
 
         boolean empty = false;
 
         // load element tag contents
-        ListIterator li = buf.getSubstring(start);
-        Substring sub = (Substring) li.next();
-        StringBuffer sb = new StringBuffer();
+        ListIterator<Substring> li = buf.getSubstring(start);
+        Substring sub = li.next();
+        StringBuilder sb = new StringBuilder();
         int use = 0, suboff = sub.off+1;
         len--;
         while (len > 0) {
@@ -815,8 +785,8 @@ public class SAXFilteredReader extends Reader {
                 }
                 use--;
             }
-            sb.append(sub.str().substring(suboff, suboff + use));
-            if (len > 0) sub = (Substring)li.next();
+            sb.append(sub.str(), suboff, suboff + use);
+            if (len > 0) sub = li.next();
             suboff = 0;
         }
         StringTokenizer st = new StringTokenizer(sb.toString(), 
@@ -826,7 +796,7 @@ public class SAXFilteredReader extends Reader {
         if (!st.hasMoreTokens()) {
             if (strict)
                 throw new SAXException("Element Tag without a name: " + 
-                                       sb.toString());
+                                       sb);
             return;
         }
         String elname = st.nextToken();
@@ -846,8 +816,8 @@ public class SAXFilteredReader extends Reader {
         // load attributes as desired
         AttributesImpl tmplist = new AttributesImpl();
         AttributesImpl attrlist = tmplist;
-        StringBuffer aval = null;
-        if (evts.anyEnabled(evts.ATTRIBUTES|evts.NAMESPACES)) {
+        StringBuilder aval;
+        if (evts.anyEnabled(OnDemandParser.ATTRIBUTES | OnDemandParser.NAMESPACES)) {
             String attr, qname, nsname, pname, lname;
             int p, q;
 
@@ -865,7 +835,7 @@ public class SAXFilteredReader extends Reader {
                         // (for HEASARC)
                         String tmp = st.nextToken();
                         while (st.hasMoreTokens() && 
-                               (tmp.length() == 0 || tmp.charAt(0) == ' '))
+                               (tmp.isEmpty() || tmp.charAt(0) == ' '))
                             tmp = st.nextToken();
                         p = tmp.indexOf('=');
                         if (p == 0) {
@@ -877,9 +847,9 @@ public class SAXFilteredReader extends Reader {
                                 if (! st.hasMoreTokens()) continue;
                                 tmp = st.nextToken();
                                 while (st.hasMoreTokens() && 
-                                       (tmp.length()==0 || tmp.charAt(0)==' '))
+                                       (tmp.isEmpty() || tmp.charAt(0)==' '))
                                     tmp = st.nextToken();
-                                if (tmp.length()==0 || 
+                                if (tmp.isEmpty() ||
                                     Character.isWhitespace(tmp.charAt(0)))
                                   continue;
                                 attr += tmp;
@@ -900,7 +870,6 @@ public class SAXFilteredReader extends Reader {
                 lname = attr.substring(0, p);
                 qname = EMPTYSTR;
                 nsname = EMPTYSTR;
-                pname = EMPTYSTR;
 
                 if (attr.charAt(++p) != '"' && attr.charAt(p) != '\'') {
                   if (strict)
@@ -908,7 +877,7 @@ public class SAXFilteredReader extends Reader {
                                            + attr);
                   p--;
                 }
-                aval = new StringBuffer(attr.substring(p + 1));
+                aval = new StringBuilder(attr.substring(p + 1));
                 if (attr.charAt(p) != '=') {
                     // we're being strict, so find the ending quote that 
                     // matches the quote character at position p
@@ -921,8 +890,6 @@ public class SAXFilteredReader extends Reader {
                         aval.append(tmp);
                         q = 0;
                     }
-
-                    attr = tmp;
                 }
                 if (st.hasMoreTokens()) st.nextToken();
 
@@ -940,14 +907,14 @@ public class SAXFilteredReader extends Reader {
 
                 String value = aval.toString();    // the parsed attribute val
 
-                if (evts.isEnabled(evts.NAMESPACES)) {
+                if (evts.isEnabled(OnDemandParser.NAMESPACES)) {
                     // check to see if attribute has a namespace prefix
                     qname = lname;
                     if ((q = qname.indexOf(':')) >= 0) {
                         lname = qname.substring(q + 1);
                         pname = qname.substring(0, q);
 
-                        if (evts.isEnabled(evts.PREFIX_MAPPING)) {
+                        if (evts.isEnabled(OnDemandParser.PREFIX_MAPPING)) {
                             if (pname.equals("xmlns")) {
                                 // register a namespace definition
                                 namespaces.startPrefixMapping(lname, value);
@@ -958,7 +925,7 @@ public class SAXFilteredReader extends Reader {
                             }
                         }
                     }
-                    else if (evts.isEnabled(evts.PREFIX_MAPPING) && 
+                    else if (evts.isEnabled(OnDemandParser.PREFIX_MAPPING) &&
                              qname.equals("xmlns"))
                     {
                         nsname = value;
@@ -971,8 +938,8 @@ public class SAXFilteredReader extends Reader {
                 tmplist.addAttribute(nsname, lname, qname, "CDATA", value);
             } 
 
-            if (evts.isEnabled(evts.PREFIX_MAPPING)) {
-                if (prefix.length() > 0) {
+            if (evts.isEnabled(OnDemandParser.PREFIX_MAPPING)) {
+                if (!prefix.isEmpty()) {
                     namesp = namespaces.getURI(prefix);
                     if (namesp == null) namesp = EMPTYSTR;
                 } 
@@ -981,11 +948,11 @@ public class SAXFilteredReader extends Reader {
                 }
             }
 
-            if (evts.isEnabled(evts.ATTRIBUTES)) {
-                Set wantatts = null;
-                if (namesp.length() > 0)
+            if (evts.isEnabled(OnDemandParser.ATTRIBUTES)) {
+                Set<String> wantatts = null;
+                if (!namesp.isEmpty())
                     wantatts = evts.attributesFor(namesp + elname);
-                if (wantatts == null && qelname.length() > 0)
+                if (wantatts == null && !qelname.isEmpty())
                     wantatts = evts.attributesFor(qelname);
                 if (wantatts == null)
                     wantatts = evts.attributesFor(elname);
@@ -1013,15 +980,15 @@ public class SAXFilteredReader extends Reader {
         chandler.startElement(namesp, elname, qelname, attrlist);
         if (empty) {
             HashSet<String> prefixes = null;
-            if (evts.anyEnabled(evts.PREFIX_MAPPING|evts.NAMESPACES))
+            if (evts.anyEnabled(OnDemandParser.PREFIX_MAPPING | OnDemandParser.NAMESPACES))
                 prefixes = new HashSet<String>();
             chandler.endElement(namesp, elname, qelname);
             namespaces.endElement(prefixes);
 
-            if (evts.anyEnabled(evts.PREFIX_MAPPING|evts.NAMESPACES) && 
+            if (evts.anyEnabled(OnDemandParser.PREFIX_MAPPING | OnDemandParser.NAMESPACES) &&
                 prefixes != null)
             {
-                if (evts.anyEnabled(evts.PREFIX_MAPPING)) {
+                if (evts.anyEnabled(OnDemandParser.PREFIX_MAPPING)) {
                     for(Iterator it = prefixes.iterator(); 
                         it.hasNext(); 
                         chandler.endPrefixMapping((String)it.next()));
@@ -1031,19 +998,16 @@ public class SAXFilteredReader extends Reader {
     }
 
     void handleEndElement(int start, int len)
-        throws SAXException, IOException
+        throws SAXException
     {
         if (chandler == null) return;
-        int q, p;
-        String prefix, elname, qelname, namesp, uri;
+        int p;
+        String prefix, elname, qelname, uri;
         HashSet<String> prefixes = null;
-
-        // update the locator
-        pending = parsed+len;
         loc.setChars(cpos + (long)start, len);
 
-        ListIterator li = buf.getSubstring(start);
-        Substring sub = (Substring)li.next();
+        ListIterator<Substring> li = buf.getSubstring(start);
+        Substring sub = li.next();
 
         int suboff = sub.off + 2;
         len -= 3;
@@ -1052,14 +1016,13 @@ public class SAXFilteredReader extends Reader {
         elname = sub.str().substring(suboff, suboff + len);
         qelname = elname;
         prefix = EMPTYSTR;
-        namesp = EMPTYSTR;
 
         if ((p = qelname.indexOf(':')) >= 0) {
             prefix = qelname.substring(0, p);
             elname = qelname.substring(p + 1);
         }
 
-        if (evts.anyEnabled(evts.NAMESPACES|evts.PREFIX_MAPPING))
+        if (evts.anyEnabled(OnDemandParser.NAMESPACES | OnDemandParser.PREFIX_MAPPING))
             prefixes = new HashSet<String>();
         uri = namespaces.getURI(prefix);
         if (uri == null) uri = EMPTYSTR;
@@ -1068,11 +1031,10 @@ public class SAXFilteredReader extends Reader {
 
         // update the scope of namespace prefixes as necessary
         if (prefixes != null && 
-            evts.anyEnabled(evts.NAMESPACES|evts.PREFIX_MAPPING)) 
+            evts.anyEnabled(OnDemandParser.NAMESPACES | OnDemandParser.PREFIX_MAPPING))
         {
-            Iterator i = null;
-            if (evts.isEnabled(evts.PREFIX_MAPPING)) {
-                for(i = prefixes.iterator(); 
+            if (evts.isEnabled(OnDemandParser.PREFIX_MAPPING)) {
+                for(Iterator<String> i = prefixes.iterator();
                     i.hasNext(); 
                     chandler.endPrefixMapping((String)i.next()));
             }
@@ -1080,42 +1042,36 @@ public class SAXFilteredReader extends Reader {
     }
 
     class PauseMarkers {
-        TreeSet marks;
+        private final TreeSet<Long> marks = new TreeSet<>();
 
         public PauseMarkers() {
-            marks = new TreeSet();
         }
 
         public PauseMarkers(long mark) {
-            marks = new TreeSet();
             setMark(mark);
         }
 
         public void setMark(long pos) {
-            marks.add(new Long(pos));
+            marks.add(pos);
         }
 
         public long nextMark() {
-            if (marks.size() > 0) return -1;
-                
-            Long next = null;
-            for(Iterator i = marks.iterator(); i.hasNext();) {
-                next = (Long)i.next();
-                if (next.longValue() - cpos - ((long) sent) >= 0)
-                    return next.longValue();
+            for (Long next : marks) {
+                if (next - cpos - ((long) sent) >= 0)
+                    return next;
             }
 
             return -1;
         }
 
-        public boolean applyPause(int want, int send[]) {
+        public boolean applyPause(int want, int[] send) {
             Long next = null;
             long diff = 0;
 
             send[0] = want;
-            while(marks.size() > 0)  {
-                next = (Long) marks.first();
-                diff = next.longValue() - cpos - (long)sent;
+            while(!marks.isEmpty())  {
+                next = marks.first();
+                diff = next - cpos - (long)sent;
                 if (diff > (long) want) return false;
                     
                 marks.remove(next);
@@ -1131,7 +1087,7 @@ public class SAXFilteredReader extends Reader {
     
     /**
      * an interface for controlling this Reader.  An instance of this 
-     * class is usually passed to compatable ContentHandlers allowing 
+     * class is usually passed to compatible ContentHandlers allowing
      * them to control the flow of characters from this Reader.
      */
     public class ParseRequestMgr implements OnDemandParser, 
@@ -1314,7 +1270,7 @@ public class SAXFilteredReader extends Reader {
          * is passed, the source will be closed and ignored.  
          */
         public void pushSource(Reader source)  {
-            if (srcstack == null) srcstack = new Stack();
+            if (srcstack == null) srcstack = new Stack<>();
 
             // push our current source onto the source stack
             srcstack.push(src);
@@ -1324,12 +1280,12 @@ public class SAXFilteredReader extends Reader {
             int pending = ((int) (loc.getCharNumber()-cpos)) + 
                                                            loc.getCharLength();
             if (buf.size() > pending) {
-                ListIterator li = buf.getSubstring(pending);
+                ListIterator<Substring> li = buf.getSubstring(pending);
                 Substring psub = (Substring)li.next();
                 String head = psub.str().substring(0, psub.off);
                 String tail = psub.str().substring(psub.off);
 
-                if (tail.length() > 0)
+                if (!tail.isEmpty())
                     srcstack.push(
                         new PushbackReader(new StringReader(tail), 128));
 
@@ -1344,7 +1300,7 @@ public class SAXFilteredReader extends Reader {
                         new PushbackReader(new StringReader(sub.str()), 128));
                 } 
 
-                if (head.length() > 0) {
+                if (!head.isEmpty()) {
                     if (sub == psub)
                         buf.replace(sub, head);
                     else
@@ -1386,10 +1342,8 @@ public class SAXFilteredReader extends Reader {
          *                 OR-ed together
          */
         public void enableEvents(int events) {
-            OnDemandParserDelegate _tmp = evts;
             if ((events & 0x100) > 0)
             {
-                OnDemandParserDelegate _tmp1 = evts;
                 events |= 0x80;
             }
             evts.enableEvents(events);
@@ -1478,7 +1432,7 @@ public class SAXFilteredReader extends Reader {
          * an effect when element events are enabled.
          * @param yes   if true, this event will be enabled; otherwise it will 
          *                 be disabled.
-         * @see OnDemandParser#loadAttributes(Set)
+         * @see OnDemandParser#loadAttributes(String, Set)
          */
         public void enableAttributes(boolean yes) {
             evts.enableAttributes(yes);
@@ -1499,7 +1453,7 @@ public class SAXFilteredReader extends Reader {
          *                  value or empty set resets the selection such that 
          *                  all attributes will be loaded.
          */
-        public void loadAttributes(String elname, Set attnames) {
+        public void loadAttributes(String elname, Set<String> attnames) {
             evts.loadAttributes(elname, attnames);
         }
 
@@ -1554,13 +1508,13 @@ public class SAXFilteredReader extends Reader {
             if (start < cpos)
                 throw new IllegalStateException("Content missing from memory");
 
-            StringBuffer sb = new StringBuffer(length);
-            ListIterator li = buf.getSubstring((int)(start - cpos));
+            StringBuilder sb = new StringBuilder(length);
+            ListIterator<Substring> li = buf.getSubstring((int)(start - cpos));
             int need = length; 
             while (li.hasNext() && need > 0) {
-                Substring sub = (Substring) li.next();
+                Substring sub = li.next();
                 sub.len = Math.min(sub.str().length() - sub.off, need);
-                sb.append(sub.toString());
+                sb.append(sub);
                 need -= sub.len;
             }
 

@@ -19,7 +19,7 @@ import org.w3c.dom.Element;
  */
 public class CachingTester extends SimpleTester {
 
-    protected File cache = null;
+    protected final File cache;
 
     /**
      * create the tester
@@ -51,7 +51,7 @@ public class CachingTester extends SimpleTester {
 
     /**
      * apply the tests against the response from the attached TestQuery.  
-     * The query will be invoke and managed by the attached Evaluator 
+     * The query will be invoked and managed by the attached Evaluator
      * through its applyTests(TestQuery, Element) method.  
      * @param addTo   the element to append the XML-encoded results into.
      * @return int    the number of test results written into addTo.  Note
@@ -64,27 +64,23 @@ public class CachingTester extends SimpleTester {
     public int applyTests(Element addTo) 
          throws TestingException, InterruptedException 
     {
-        if (cache == null) 
+        if (cache == null) {
             return evaluator.applyTests(tquery, addTo);
+        }
 
         synchronized (cache) {
-            InputStream is = null;
-            try{
+            try {
                 if (! cache.exists()) {
                     // call the service and cache the response to the file
                     // System.err.println("Caching data");
                     cacheResponse(cache, tquery.getTimeout());
                 }
-                is = new FileInputStream(cache);
-                return evaluator.applyTests(is, tquery, addTo);
+                try (final InputStream is = new FileInputStream(cache)) {
+                    return evaluator.applyTests(is, tquery, addTo);
+                }
             }
             catch (IOException ex) {
                 throw new TestingIOException(ex);
-            }
-            finally {
-                if (is != null) {
-                    try { is.close(); } catch (IOException e) { }
-                }
             }
         }
     }
@@ -102,20 +98,12 @@ public class CachingTester extends SimpleTester {
     {
         QueryConnection conn = getReadyConnection(timeout);
 
-        InputStream is = null;
-        FileOutputStream os = null;
-        try {
-            is = conn.getStream();
-            os = new FileOutputStream(out);
-            byte[] buf = new byte[8*1024];
-            int n = 0;
+        try (InputStream is = conn.getStream(); FileOutputStream os = new FileOutputStream(out)) {
+            byte[] buf = new byte[8 * 1024];
+            int n;
             while ((n = is.read(buf)) >= 0) {
                 os.write(buf, 0, n);
             }
-        }
-        finally {
-            if (is != null) is.close();
-            if (os != null) os.close();
         }
     }
 
@@ -144,21 +132,4 @@ public class CachingTester extends SimpleTester {
 
         return conn;
     }
-
-    /**
-     * return the file currently be used as the cache for the service response
-     * Care should be taken not to mess with this file while another thread
-     * may be running applyTests.  As an aid, applyTests will acquire a 
-     * synchronization lock on the file object.  Callers that get the File
-     * via this object do the same before trying to, e.g., delete the underlying
-     * file.  
-     */
-    public File getCacheFile() { return cache; }
-
-    /**
-     * set the file to be used as the cache for the service response.  The
-     * previously held file will no longer be used.  
-     */
-    public void setCacheFile(File cachefile) { cache = cachefile; }
-
 }

@@ -13,11 +13,11 @@ public class SimpleCharStream
   int available;
   int tokenBegin;
   public int bufpos = -1;
-  protected int bufline[];
-  protected int bufcolumn[];
+  protected int[] bufline;
+  protected int[] bufcolumn;
 
-  protected int column = 0;
-  protected int line = 1;
+  protected int column;
+  protected int line;
 
   protected boolean prevCharIsCR = false;
   protected boolean prevCharIsLF = false;
@@ -31,8 +31,8 @@ public class SimpleCharStream
   protected void ExpandBuff(boolean wrapAround)
   {
      char[] newbuffer = new char[bufsize + 2048];
-     int newbufline[] = new int[bufsize + 2048];
-     int newbufcolumn[] = new int[bufsize + 2048];
+     int[] newbufline = new int[bufsize + 2048];
+     int[] newbufcolumn = new int[bufsize + 2048];
 
      try
      {
@@ -162,7 +162,7 @@ public class SimpleCharStream
            break;
         case '\t' :
            column--;
-           column += (8 - (column & 07));
+           column += (8 - (column & 7));
            break;
         default :
            break;
@@ -197,7 +197,6 @@ public class SimpleCharStream
    * @deprecated 
    * @see #getEndColumn
    */
-
   public int getColumn() {
      return bufcolumn[bufpos];
   }
@@ -206,7 +205,6 @@ public class SimpleCharStream
    * @deprecated 
    * @see #getEndLine
    */
-
   public int getLine() {
      return bufline[bufpos];
   }

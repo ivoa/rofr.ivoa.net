@@ -3,14 +3,11 @@ package net.ivoa.util;
 import org.w3c.dom.Document;
 import org.w3c.dom.Node;
 import org.w3c.dom.Element;
-import org.w3c.dom.NodeList;
 
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.ParserConfigurationException;
 import org.xml.sax.SAXException;
-import org.xml.sax.SAXParseException;
-import org.xml.sax.InputSource;
 
 import java.io.InputStream;
 import java.io.FileInputStream;
@@ -24,7 +21,7 @@ import java.util.StringTokenizer;
 import java.net.URL;
 
 /**
- * a container class that holds application configuration paramters read in 
+ * a container class that holds application configuration parameters read in
  * from an XML file.  <p>
  *
  * A Configuration file is an XML file in which parameters are encoded either 
@@ -95,7 +92,7 @@ public class Configuration {
      * @throws IOException   if there is a problem while reading the file
      * @throws SAXException  if XML syntax errors are found
      */
-    public Configuration(String config, Class appClass) 
+    public Configuration(String config, Class<?> appClass)
          throws FileNotFoundException, IOException, SAXException
     {
 
@@ -248,7 +245,7 @@ public class Configuration {
      * @throws IllegalArgumentException  if any field except the last one 
      *             contains an "@" character
      */
-    protected List findBlocks(String path) throws IllegalArgumentException {
+    protected List<Configuration> findBlocks(String path) throws IllegalArgumentException {
         String name;
         Node node;
         int i;
@@ -311,13 +308,7 @@ public class Configuration {
     public Configuration[] getBlocks(String path) 
          throws IllegalArgumentException 
     {
-        List matched = findBlocks(path);
-        Configuration[] out = new Configuration[matched.size()];
-        ListIterator iter = matched.listIterator();
-        for(int i=0; i < out.length && iter.hasNext(); i++) {
-            out[i] = (Configuration) iter.next();
-        }
-        return out;
+        return findBlocks(path).toArray(Configuration[]::new);
     }
 
     /**
@@ -340,17 +331,17 @@ public class Configuration {
     public Configuration getConfiguration(String path, String attname, 
                                           String value) 
     {
-        List matched = findBlocks(path);
-        ListIterator iter = matched.listIterator();
+        List<Configuration> matched = findBlocks(path);
+        ListIterator<Configuration> iter = matched.listIterator();
         if (attname == null) {
-            return ((Configuration) ((iter.hasNext()) ? iter.next() : null));
+            return (iter.hasNext() ? iter.next() : null);
         }
         else {
             Configuration c = null;
             String val = null;
 
             while(iter.hasNext()) {
-                c = (Configuration) iter.next();
+                c = iter.next();
                 val = c.getParameter("@"+attname);
                 if (val != null && val.trim().equals(value))
                     return c;
@@ -359,7 +350,7 @@ public class Configuration {
         return null;
     }
 
-    class MatchedBlocks extends LinkedList {
+    static class MatchedBlocks extends LinkedList<Configuration> {
         public MatchedBlocks(Configuration first) {
             addLast(first);
         }
@@ -368,7 +359,7 @@ public class Configuration {
             addLast(new Configuration(node, base + "/" + node.getNodeName()));
         }
 
-        public Configuration pop() { return (Configuration) removeFirst(); }
+        public Configuration pop() { return removeFirst(); }
     }
 
     /**
@@ -383,37 +374,28 @@ public class Configuration {
      *             contains an "@" character
      */
     public String[] getParameters(String path) {
-        List matched = findBlocks(path);
+        List<Configuration> matched = findBlocks(path);
 
-        LinkedList values = new LinkedList();
-        ListIterator iter = matched.listIterator();
-        while(iter.hasNext()) {
-            Node node = ((Configuration) iter.next()).getRoot();
+        LinkedList<String> values = new LinkedList<>();
+        for (Configuration configuration : matched) {
+            Node node = configuration.getRoot();
             if (node.getNodeType() == Node.ATTRIBUTE_NODE) {
                 values.addLast(node.getNodeValue());
-            }
-            else if (node.getNodeType() == Node.ELEMENT_NODE) {
+            } else if (node.getNodeType() == Node.ELEMENT_NODE) {
                 for (node = node.getFirstChild();
                      node != null && node.getNodeType() != Node.TEXT_NODE;
-                     node = node.getNextSibling()) 
-                { 
+                     node = node.getNextSibling()) {
                     if (node.getNodeType() == Node.ELEMENT_NODE) {
                         node = null;
                         break;
                     }
                 }
-                if (node != null) 
+                if (node != null)
                     values.addLast(node.getNodeValue().trim());
             }
         }
 
-        String[] out = new String[values.size()];
-        iter = values.listIterator();
-        for(int i=0; i < out.length; i++) {
-            out[i] = (String) iter.next();
-        }
-
-        return out;
+        return values.toArray(String[]::new);
     }
 
     /**
@@ -451,17 +433,17 @@ public class Configuration {
      *             contains an "@" character 
      */
     public String getParameter(String path, String attname, String value) {
-        if (attname == null || attname.trim().length() == 0) 
+        if (attname == null || attname.trim().isEmpty())
             return getParameter(path);
 
-        List matched = findBlocks(path);
-        ListIterator iter = matched.listIterator();
+        List<Configuration> matched = findBlocks(path);
+        ListIterator<Configuration> iter = matched.listIterator();
         String attpath = "@"+attname;
         String out = null;
         String attval = null;
         Configuration candidate = null;
         while (out == null && iter.hasNext()) {
-            candidate = (Configuration) iter.next();
+            candidate = iter.next();
             attval = candidate.getParameter(attpath);
             if ((attval == null && value == null) || 
                 (value != null && value.equals(attval)))
@@ -504,7 +486,7 @@ public class Configuration {
      *    found anywhere.
      * @throws IOException   if there is a problem while reading the file
      */
-    public static InputStream openFile(String filename, Class wrtClass) 
+    public static InputStream openFile(String filename, Class<?> wrtClass)
          throws FileNotFoundException, IOException
     {
         InputStream strm = null;
@@ -548,7 +530,7 @@ public class Configuration {
      *    found anywhere.
      * @throws IOException   if there is a problem while reading the file
      */
-    public static String findURL(String filename, Class wrtClass) 
+    public static String findURL(String filename, Class<?> wrtClass)
          throws FileNotFoundException, IOException
     {
         String out = null;

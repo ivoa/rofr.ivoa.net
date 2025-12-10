@@ -3,12 +3,9 @@ package net.ivoa.registry.harvest;
 import net.ivoa.registry.util.ResourcePeeker;
 import net.ivoa.registry.util.ResourceSummary;
 
-import java.io.Reader;
-import java.io.InputStreamReader;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.InputStream;
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -17,8 +14,6 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.HashSet;
 
-import org.junit.Before;
-import org.junit.After;
 import org.junit.Test;
 import static org.junit.Assert.*;
 

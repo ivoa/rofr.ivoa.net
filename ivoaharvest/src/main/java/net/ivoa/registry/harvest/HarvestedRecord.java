@@ -230,10 +230,12 @@ public class HarvestedRecord {
     public void writeContent(Writer out) throws IOException {
         char[] buf = new char[16*1024];
         int n = 0;
-        Reader in = getContentReader();
+        final Reader in = getContentReader();
         synchronized (in) {
             while ((n = in.read(buf)) >= 0) 
                 out.write(buf, 0, n);
+
+            out.flush();
         }
     }
 }

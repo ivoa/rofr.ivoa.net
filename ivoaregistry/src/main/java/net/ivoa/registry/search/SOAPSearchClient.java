@@ -8,25 +8,22 @@ import net.ivoa.registry.RegistryServiceException;
 import net.ivoa.registry.RegistryFormatException;
 import net.ivoa.registry.RegistryAccessException;
 
+import java.net.URI;
 import java.net.URL;
 import java.net.MalformedURLException;
 
-import javax.xml.soap.MessageFactory;
-import javax.xml.soap.SOAPMessage;
-import javax.xml.soap.SOAPBody;
-import javax.xml.soap.SOAPEnvelope;
-import javax.xml.soap.SOAPElement;
-import javax.xml.soap.SOAPException;
-import javax.xml.soap.SOAPConnection;
-import javax.xml.soap.SOAPConnectionFactory;
-import javax.xml.soap.Name;
-import javax.xml.soap.MimeHeaders;
+import jakarta.xml.soap.MessageFactory;
+import jakarta.xml.soap.SOAPMessage;
+import jakarta.xml.soap.SOAPBody;
+import jakarta.xml.soap.SOAPEnvelope;
+import jakarta.xml.soap.SOAPElement;
+import jakarta.xml.soap.SOAPException;
+import jakarta.xml.soap.Name;
 
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 import org.w3c.dom.Attr;
 import org.w3c.dom.NamedNodeMap;
-import org.w3c.dom.NodeList;
 import org.w3c.dom.DOMException;
 
 /**
@@ -45,7 +42,6 @@ public class SOAPSearchClient {
 
     protected URL endpoint = null;
     protected MessageFactory soapfactory = null;
-    protected SOAPConnection conn = null;
     protected ServiceCaller caller = null;
 
     // these are used for backward compatibility with earlier working draft
@@ -181,8 +177,7 @@ public class SOAPSearchClient {
         arg = sel.addChildElement(makeArgName(msg, "identifiersOnly"));
         arg.addTextNode(Boolean.toString(identifiersOnly));
 
-        Element res = call(msg, KEYWORDSEARCH_ACTION);
-        return res;
+        return call(msg, KEYWORDSEARCH_ACTION);
     }
 
     /**
@@ -209,7 +204,6 @@ public class SOAPSearchClient {
          throws RegistryServiceException, SOAPException, DOMException
     {
         SearchQuery query = new SearchQuery();
-        Element wparent = query.getWhereParent();
 
         query.setWhere(adqlWhere);
         query.setFrom(from);
@@ -287,8 +281,7 @@ public class SOAPSearchClient {
         SOAPElement id = sel.addChildElement(makeArgName(msg, "identifier"));
         id.addTextNode(ivoid.trim());
 
-        Element res = call(msg, GETRESOURCE_ACTION);
-        return res;
+        return call(msg, GETRESOURCE_ACTION);
     }
 
     protected Name makeRSName(SOAPMessage msg, String elname) 
@@ -322,15 +315,13 @@ public class SOAPSearchClient {
                 SOAPException
     {
         SOAPMessage msg = makeSOAPMessage();
-        SOAPEnvelope env = msg.getSOAPPart().getEnvelope();
 
         SOAPBody body = msg.getSOAPBody();
         SOAPElement sel = body.addBodyElement(makeRSName(msg, "XQuerySearch"));
         SOAPElement id = sel.addChildElement(makeArgName(msg, "xquery"));
         id.addTextNode(xquery.trim());
 
-        Element res = call(msg, XQUERYSEARCH_ACTION);
-        return res;
+        return call(msg, XQUERYSEARCH_ACTION);
     }
      
     /**
@@ -499,28 +490,27 @@ public class SOAPSearchClient {
     public int getKeywordSearchVariant() {
         if (kwsVariant == null) {
             try {
-                URL wsdl = new URL(endpoint.toString() + "?wsdl");
-                int var = AssessWSDL.keywordSearchVariant(wsdl);
-                kwsVariant = new Integer(var);
+                URL wsdl = URI.create(endpoint.toString() + "?wsdl").toURL();
+                kwsVariant = AssessWSDL.keywordSearchVariant(wsdl);
             }
             catch (MalformedURLException ex) {
                 // the endpoint URL is probably screwy, in which case any
                 // query call will probably fail.  We'll call this unrecognized.
-                kwsVariant = new Integer(0);
+                kwsVariant = 0;
             }
             catch (RegistryFormatException ex) {
                 // something appears to be fatal syntax error in the WSDL
-                kwsVariant = new Integer(0);
+                kwsVariant = 0;
             }
             catch (RegistryAccessException ex) {
                 // an I/O or network error occurred.  This could be temporary.
                 // We'll allow three attempts and then assume unrecognized. 
                 if (++wsdlAttempt < 3) return 0;
-                kwsVariant = new Integer(0);
+                kwsVariant = 0;
             }
         }
                 
-        return kwsVariant.intValue();
+        return kwsVariant;
     }
 
     boolean useKwsTo() {

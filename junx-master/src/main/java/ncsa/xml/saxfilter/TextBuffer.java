@@ -258,11 +258,11 @@ public class TextBuffer {
         length += replacement.length();
     }
 
-    public class Iter implements ListIterator {
-        ListIterator li = null;
+    public class Iter implements ListIterator<Substring> {
+        private final ListIterator<Substring> li;
         Substring last = null;
 
-        Iter(ListIterator li) { this.li = li; }
+        Iter(ListIterator<Substring> li) { this.li = li; }
 
         void unsupp(String op) {
             throw new UnsupportedOperationException(op);
@@ -271,19 +271,19 @@ public class TextBuffer {
         void privAdd(Substring s) { li.add(s); }
         void privSet(Substring s) { li.set(s); }
 
-        public final void add(Object o) { unsupp("add"); }
-        public final void set(Object o) { unsupp("set"); }
+        public final void add(Substring o) { unsupp("add"); }
+        public final void set(Substring o) { unsupp("set"); }
         public final boolean hasNext() { return li.hasNext(); }
         public final boolean hasPrevious() { return li.hasPrevious(); }
         public final int nextIndex() { return li.nextIndex(); }
         public final int previousIndex() { return li.previousIndex(); }
 
-        public final Object next() {
-            last = (Substring)li.next();
+        public final Substring next() {
+            last = li.next();
             return last;
         }
-        public final Object previous() {
-            last = (Substring)li.previous();
+        public final Substring previous() {
+            last = li.previous();
             return last;
         }
         public final Substring current() { return last; }
