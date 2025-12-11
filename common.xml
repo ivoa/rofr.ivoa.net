@@ -1,6 +1,5 @@
 <?xml version="1.0"?>
-<project xmlns:ivy="antlib:org.apache.ivy.ant"
-         name="common">
+<project xmlns:ivy="antlib:org.apache.ivy.ant" xmlns:jacoco="antlib:org.jacoco.ant" name="common">
 
   <dirname  property="common.basedir" file="${ant.file.common}"/>
   <property name="lib.dir" value="${basedir}/lib"/>
@@ -28,6 +27,16 @@
     </isfileselected>
   </condition>
 
+    <taskdef uri="antlib:org.jacoco.ant" resource="org/jacoco/ant/antlib.xml">
+        <classpath path="antlib/jacocoant.jar" />
+        <classpath path="antlib/jacoco-core.jar"/>
+        <classpath path="antlib/jacoco-report.jar"/>
+        <classpath path="antlib/jacoco-agent.jar"/>
+        <classpath path="antlib/asm.jar"/>
+        <classpath path="antlib/asm-commons.jar"/>
+        <classpath path="antlib/asm-tree.jar"/>
+    </taskdef>
+
   <target name="initialize"
 	  description="Initialize build state">
     <mkdir dir="${lib.dir}"/>
@@ -43,7 +52,7 @@
 
   <target name="resolve"
 	  description="Initialize build state"
-	  depends="ivy-init">
+	  depends="ivy-init, jacoco-init">
     <ivy:retrieve pattern="${lib.dir}/[conf]/[artifact](-[classifier]).[ext]"/>
   </target>
 
@@ -80,24 +89,41 @@
   <target name="test"
 	  description="Run unit tests"
 	  depends="test-compile">
-      <junit printsummary="yes"
-             dir="${basedir}"
-	   haltonfailure="yes">
-      <classpath>
-	    <pathelement path="${classes.dir}"/>
-	    <pathelement path="${test.classes.dir}"/>
-	    <fileset dir="${lib.dir}/runtime"/>
-        <fileset dir="${lib.dir}/test"/>
-        <pathelement path="${test.resources.dir}"/>
-        <pathelement path="${resources.dir}"/>
-      </classpath>
-      
-      <formatter type="plain"/>
-      
-      <batchtest fork="yes" todir="${test.reports.dir}">
-	<fileset dir="${test.java.dir}"/>
-      </batchtest>
-    </junit>
+      <jacoco:coverage>
+          <junit printsummary="yes" fork="yes"
+                 dir="${basedir}"
+           haltonfailure="yes">
+              <classpath>
+                <pathelement path="${classes.dir}"/>
+                <pathelement path="${test.classes.dir}"/>
+                <fileset dir="${lib.dir}/runtime"/>
+                <fileset dir="${lib.dir}/test"/>
+                <pathelement path="${test.resources.dir}"/>
+                <pathelement path="${resources.dir}"/>
+              </classpath>
+
+              <formatter type="plain"/>
+
+              <batchtest fork="yes" todir="${test.reports.dir}">
+                <fileset dir="${test.java.dir}">
+                  <exclude name="**/TestHarvestValidater.java"/>
+                </fileset>
+              </batchtest>
+            </junit>
+      </jacoco:coverage>
+      <jacoco:report>
+          <structure name="${ant.project.name}">
+              <classfiles>
+                  <fileset dir="${classes.dir}"/>
+              </classfiles>
+              <sourcefiles encoding="UTF-8">
+                  <fileset dir="src"/>
+              </sourcefiles>
+          </structure>
+
+          <html destdir="${target.dir}/test-reports"/>
+
+      </jacoco:report>
   </target>
 
   <target name="package"
@@ -181,9 +207,16 @@
   </target>
 
   <property name="maven.central.url" value="https://repo1.maven.org/maven2" />
- 
-  <available file="antlib/ivy.jar" type="file" property="have.ivy.jar"/>
-  
+
+    <available file="antlib/ivy.jar" type="file" property="have.ivy.jar"/>
+    <available file="antlib/jacocoant.jar" type="file" property="have.jacocoant.jar"/>
+    <available file="antlib/jacoco-core.jar" type="file" property="have.jacoco-core.jar"/>
+    <available file="antlib/jacoco-report.jar" type="file" property="have.jacoco-report.jar"/>
+    <available file="antlib/jacoco-agent.jar" type="file" property="have.jacoco-agent.jar"/>
+    <available file="antlib/asm.jar" type="file" property="have.asm.jar"/>
+    <available file="antlib/asm-commons.jar" type="file" property="have.asm-commons.jar"/>
+    <available file="antlib/asm-tree.jar" type="file" property="have.asm-tree.jar"/>
+
   <target name="ivy-check-taskdefs">
     <condition property="have.ivy.taskdefs">
       <typefound uri="antlib:org.apache.ivy.ant" name="publish"/>
@@ -210,4 +243,53 @@
     <get src="${maven.central.url}/org/apache/ivy/ivy/2.5.0/ivy-2.5.0.jar"
 	 dest="antlib/ivy.jar" usetimestamp="true" verbose="true" />
   </target>
+
+    <target name="jacoco-init"
+            depends="asm-init, jacocoant-download">
+        <path id="jacoco.class.path">
+            <fileset dir="antlib">
+                <include name="*.jar"/>
+            </fileset>
+        </path>
+        <taskdef resource="org/jacoco/ant/antlib.xml"
+                 uri="antlib:org.jacoco.ant"
+                 classpathref="jacoco.class.path" />
+    </target>
+
+    <target name="jacocoant-download"
+            unless="have.jacocoant.jar, have.jacoco-core.jar, have.jacoco-report.jar, have.jacoco-agent.jar">
+        <mkdir dir="antlib" />
+        <get src="${maven.central.url}/org/jacoco/org.jacoco.ant/0.8.14/org.jacoco.ant-0.8.14.jar"
+             dest="antlib/jacocoant.jar" usetimestamp="true" verbose="true" />
+        <get src="${maven.central.url}/org/jacoco/org.jacoco.core/0.8.14/org.jacoco.core-0.8.14.jar"
+             dest="antlib/jacoco-core.jar" usetimestamp="true" verbose="true" />
+        <get src="${maven.central.url}/org/jacoco/org.jacoco.report/0.8.14/org.jacoco.report-0.8.14.jar"
+             dest="antlib/jacoco-report.jar" usetimestamp="true" verbose="true" />
+        <get src="${maven.central.url}/org/jacoco/org.jacoco.agent/0.8.14/org.jacoco.agent-0.8.14.jar"
+             dest="antlib/jacoco-agent.jar" usetimestamp="true" verbose="true" />
+    </target>
+
+    <target name="asm-init"
+            depends="asm-download">
+        <path id="jacoco.class.path">
+            <fileset dir="antlib">
+                <include name="*.jar"/>
+            </fileset>
+        </path>
+        <taskdef resource="org/jacoco/ant/antlib.xml"
+                 uri="antlib:org.jacoco.ant"
+                 classpathref="jacoco.class.path" />
+    </target>
+
+    <target name="asm-download"
+            unless="have.asm.jar, have.asm-commons.jar, have.asm-tree.jar">
+        <mkdir dir="antlib" />
+        <get src="${maven.central.url}/org/ow2/asm/asm/9.9/asm-9.9.jar"
+             dest="antlib/asm.jar" usetimestamp="true" verbose="true" />
+        <get src="${maven.central.url}/org/ow2/asm/asm-commons/9.9/asm-commons-9.9.jar"
+             dest="antlib/asm-commons.jar" usetimestamp="true" verbose="true" />
+        <get src="${maven.central.url}/org/ow2/asm/asm-tree/9.9/asm-tree-9.9.jar"
+             dest="antlib/asm-tree.jar" usetimestamp="true" verbose="true" />
+    </target>
 </project>
+

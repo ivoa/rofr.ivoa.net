@@ -1,0 +1,88 @@
+name: "CD: Release Build"
+
+on:
+  repository_dispatch:
+    types: [release-build]
+
+permissions:
+  contents: read
+
+env:
+  REGISTRY: images.opencadc.org
+  IMAGE: platform/skaha
+  TAG: latest
+  TAG_RELEASE: ${{ github.event.client_payload.tag_name }}
+
+jobs:
+  release-build:
+    if: github.repository == 'opencadc/science-platform'
+    runs-on: ubuntu-latest
+    permissions:
+      attestations: write
+      id-token: write
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@95d9a5deda9de15063e7595e9719c11c38c90ae2 # v2.13.2
+        with:
+          egress-policy: audit
+      - name: Client Payload
+        id: client-payload
+        run: |
+          echo "Client Payload: ${{ toJson(github.event.client_payload) }}"
+      -
+        name: Checkout
+        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+        with:
+          install: true
+      - name: Perform Container Registry Login
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
+        with:
+          registry: images.opencadc.org
+          username: ${{ secrets.SKAHA_REGISTRY_USERNAME }}
+          password: ${{ secrets.SKAHA_REGISTRY_TOKEN }}
+      - name: Build and Push Docker Image
+        id: build
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          context: .
+          target: production
+          file: skaha/Dockerfile
+          platforms: linux/amd64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: mode=max
+          sbom: true
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ env.TAG }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ env.TAG_RELEASE }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE }}:v${{ env.TAG_RELEASE }}
+          labels: |
+            org.opencontainers.image.title=skaha
+            org.opencontainers.image.version=${{ env.TAG_RELEASE }}
+            org.opencontainers.image.description="Science Platform Backend"
+            org.opencontainers.image.licenses=AGPL-3.0
+            org.opencontainers.image.url=https://github.com/opencadc/science-platform
+      - name: Attest Container Image
+        # See https://github.com/marketplace/actions/attest-build-provenance#container-image
+        # for more information on the attest-build-provenance action
+        id: attest
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          # Currently not pushing attestations to Harbor Registry
+          # push-to-registry: true
+          show-summary: true
+      - name: Install Cosign
+        id: install-cosign
+        uses: sigstore/cosign-installer@faadad0cce49287aee09b3a48701e75088a2c6ad # v4.0.0
+        with:
+          cosign-release: 'v2.4.1'
+      - name: Cosign Container Image
+        id: cosign
+        run: |
+          cosign version
+          cosign sign --yes ${{ env.REGISTRY }}/${{ env.IMAGE }}@${{ steps.build.outputs.digest }} --upload

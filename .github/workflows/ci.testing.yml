@@ -1,0 +1,76 @@
+name: "CI: Testing"
+
+on:
+    pull_request:
+      branches: [main]
+    push:
+      branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@95d9a5deda9de15063e7595e9719c11c38c90ae2 # v2.13.2
+        with:
+          egress-policy: audit
+      - name: Checkout code
+        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+        with:
+            fetch-depth: 0
+      - name: Setup Java
+        uses: actions/setup-java@dded0888837ed1f317902acf8a20df0ad188d165 # v5.0.0
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+      - name: Clear Ivy Cache
+        run: rm -rf ~/.ivy2/cache
+      - name: Show JAVA_HOME
+        run: echo "${JAVA_HOME}"
+      - name: Run Tests
+        run: |
+             ant -noinput -buildfile build.xml clean
+             ant -buildfile adql-1.0/build.xml -noinput
+             ant -buildfile junx-master/build.xml -noinput
+             ant -buildfile ivoaregistry/build.xml -noinput
+             ant -buildfile ivoaharvest/build.xml -noinput             
+             ant -buildfile dalvalidate/build.xml -noinput
+      - name: Upload coverage artifacts
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: ivoa-rofr-unittests-coverage
+          path: ivoa-rofr/build/reports/jacoco/test/jacocoTestReport.xml
+          if-no-files-found: error
+          retention-days: 1
+          overwrite: true
+
+  codecov:
+    runs-on: ubuntu-latest
+    needs: tests
+    permissions:
+      id-token: write
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@95d9a5deda9de15063e7595e9719c11c38c90ae2 # v2.13.2
+        with:
+          egress-policy: audit
+      - name: Download coverage artifacts
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
+        with:
+          name: ivoa-rofr-unittests-coverage
+      - name: List Downloaded Artifacts
+        run: |
+            echo "Downloaded artifacts:"
+            ls -lah $GITHUB_WORKSPACE
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          file: jacocoTestReport.xml
+          flags: ivoa-rofr-unittests-coverage
+          name: ivoa-rofr-unittests-coverage
+          fail_ci_if_error: true
+          verbose: true
