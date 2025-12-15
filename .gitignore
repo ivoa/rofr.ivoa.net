@@ -1,3 +1,4 @@
-*/antlib/
-*/lib/
-*/target/
+**/antlib/
+**/lib/
+**/target/
+**/report

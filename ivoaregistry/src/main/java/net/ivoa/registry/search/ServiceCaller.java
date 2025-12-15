@@ -8,8 +8,8 @@ import net.ivoa.registry.RegistryServiceException;
 
 import java.net.URL;
 
-import javax.xml.soap.SOAPMessage;
-import javax.xml.soap.SOAPException;
+import jakarta.xml.soap.SOAPMessage;
+import jakarta.xml.soap.SOAPException;
 import org.w3c.dom.Element;
 
 /**
@@ -30,12 +30,7 @@ public interface ServiceCaller {
     /**
      * set the service endpoint URL
      */
-    public void setEndpoint(URL endpoint);
-
-    /**
-     * get the service endpoint URL currently in use
-     */
-    public URL getEndpoint();
+    void setEndpoint(URL endpoint);
 
     /**
      * call the SOAP service and return the content of the body the 
@@ -47,7 +42,7 @@ public interface ServiceCaller {
      * @exception RegistryServiceException   if any errors occurs while 
      *                communicating with the service.
      */
-    public Element call(SOAPMessage msg, String actionURI)
+    Element call(SOAPMessage msg, String actionURI)
          throws RegistryServiceException, SOAPException;
 
 }

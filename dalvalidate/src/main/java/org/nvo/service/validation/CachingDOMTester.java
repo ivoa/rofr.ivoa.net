@@ -213,13 +213,15 @@ public class CachingDOMTester extends CachingTester {
 
     /**
      * provide a preparsed version of the service response.  This has the 
-     * side effect of reseting the cache File to null if that file exists.  
+     * side effect of resetting the cache File to null if that file exists.
      * (This response, though, will not be cached to the file if the file 
      * doesn't exist.)
      */
     public void setDocument(Document response) {
         resp = response;
-        if (cache.exists()) cache = null;
+        if (cache.exists()) {
+            cache.delete();
+        }
     }
 
     /**

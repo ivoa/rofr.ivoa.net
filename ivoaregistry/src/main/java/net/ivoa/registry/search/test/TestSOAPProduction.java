@@ -7,20 +7,21 @@ package net.ivoa.registry.search.test;
 import net.ivoa.registry.search.SOAPSearchClient;
 import net.ivoa.registry.RegistryServiceException;
 
-import javax.xml.soap.SOAPMessage;
-import javax.xml.soap.SOAPException;
+import jakarta.xml.soap.SOAPMessage;
+import jakarta.xml.soap.SOAPException;
 import org.w3c.dom.Element;
 
 import java.io.IOException;
+import java.net.URI;
 import java.net.URL;
 import java.net.MalformedURLException;
 
 public class TestSOAPProduction extends SOAPSearchClient {
 
-    private static URL dummyurl = null;
+    private static final URL dummyurl;
     static {
         try {
-            dummyurl = new URL("http://test.net/dummy");
+            dummyurl = URI.create("http://test.net/dummy").toURL();
         }
         catch (MalformedURLException ex) {
             // shouldn't get here
@@ -44,7 +45,7 @@ public class TestSOAPProduction extends SOAPSearchClient {
     {
         try {
             msg.writeTo(System.err);
-            System.err.println("");
+            System.err.println();
         } catch (IOException ex) {
             throw new RegistryServiceException(ex.getMessage());
         }
@@ -62,7 +63,7 @@ public class TestSOAPProduction extends SOAPSearchClient {
                 client.keywordSearch("quasars [black hole]", true, 0, 0, false);
         }
         catch (Exception ex) {
-            ex.printStackTrace();
+            ex.printStackTrace(System.err);
             System.exit(1);
         }
     }

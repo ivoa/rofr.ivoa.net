@@ -61,7 +61,7 @@
   </publications>
 
   <dependencies>
-	  <dependency org="xerces" name="xercesImpl" rev="2.7.1" conf="compile->compile(*),master(*)"/>
+	  <dependency org="xerces" name="xercesImpl" rev="2.12.2" conf="compile->compile(*),master(*)"/>
 	  <dependency org="junit" name="junit" rev="4.12" conf="test->runtime(*),master(*)"/>
   </dependencies>
 

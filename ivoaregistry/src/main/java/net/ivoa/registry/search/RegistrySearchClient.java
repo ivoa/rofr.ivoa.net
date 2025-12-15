@@ -13,10 +13,10 @@ import net.ivoa.registry.RegistryAccessException;
 
 import java.io.StringReader;
 import java.lang.reflect.Method;
+import java.net.URI;
 import java.net.URL;
 import java.net.MalformedURLException;
-import javax.xml.soap.SOAPException;
-import javax.xml.transform.TransformerException;
+import jakarta.xml.soap.SOAPException;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 
@@ -26,24 +26,23 @@ import org.w3c.dom.Node;
 public class RegistrySearchClient {
 
     protected int resRecordBuffer = 500;
-    protected int resIDBuffer = 10000;
-    protected SOAPSearchClient service = null;
+    protected SOAPSearchClient service;
     protected short strictness = WARN_COMPLIANCE;
 
     /**
      * the default registry endpoint to connect to.  This can be overridden
-     * via the system property "VORegsitry.search.defaultRegistry".  
+     * via the system property "VORegistry.search.defaultRegistry".
      */
-    public static URL defaultEndpoint= null;
+    public static URL defaultEndpoint;
     static {
         String hardcoded = "http://nvo.stsci.edu/vor10/ristandardservice.asmx";
         String defURL = System.getProperty("VORegsitry.search.defaultRegistry",
                                            hardcoded);
-        try { defaultEndpoint = new URL(defURL); }
+        try { defaultEndpoint = URI.create(defURL).toURL(); }
         catch (MalformedURLException ex) {
             System.err.println("Malformed default registry URL: " +
                                defURL);
-            try { defaultEndpoint = new URL(hardcoded); }
+            try { defaultEndpoint = URI.create(hardcoded).toURL(); }
             catch (MalformedURLException e) {
                 throw new InternalError("programmer error: bad hardcoded URL: "+
                                         hardcoded);
@@ -271,7 +270,7 @@ public class RegistrySearchClient {
      * search for the resource identifiers whose descriptions match an ADQL
      * query.   <p>
      *
-     * Note that all of the checked exceptions thrown by this 
+     * Note that all the checked exceptions thrown by this
      * method inherit from a common base class, RegistryAccessException.  
      *
      * @param adqlWhere   the ADQL Where clause that constrains the search
@@ -296,10 +295,10 @@ public class RegistrySearchClient {
     /**
      * search for resource description information using XQuery.    <p>
      *
-     * Note that all of the checked exceptions thrown by this 
+     * Note that all the checked exceptions thrown by this
      * method inherit from a common base class, RegistryAccessException.  
      *
-     * @param String   the XQuery stored as a string.
+     * @param xquery   the XQuery stored as a string.
      * @exception RegistryServiceException  if the service encounters an error 
      *                           (i.e. on the server side).
      * @exception RegistryFormatException   if the XML response is non-compliant
@@ -367,25 +366,23 @@ public class RegistrySearchClient {
             // convert ADQL string to XML
             Element where = convertWhere(adqlwhere);
 
-            args = new Object[] { where, new Integer(from), 
-                                  new Integer(max), new Boolean(idsonly) };
+            args = new Object[] { where, from, max, idsonly };
         }
 
         public void updateArgs() {
-            args[1] = new Integer(getFrom());
-            args[2] = new Integer(getMax());
+            args[1] = getFrom();
+            args[2] = getMax();
         }
     }
 
     private static Method getKeywordSearchMethod() {
         try {
-            return (SOAPSearchClient.class).getMethod("keywordSearch", 
-                                                      new Class[]
-                                                           { String.class, 
-                                                             Boolean.TYPE,
-                                                             Integer.TYPE,
-                                                             Integer.TYPE,
-                                                             Boolean.TYPE });
+            return (SOAPSearchClient.class).getMethod("keywordSearch",
+                    String.class,
+                    Boolean.TYPE,
+                    Integer.TYPE,
+                    Integer.TYPE,
+                    Boolean.TYPE);
 
         }
         catch (NoSuchMethodException ex) {
@@ -394,20 +391,18 @@ public class RegistrySearchClient {
         }
     }
     
-    class KeywordSearch extends Searcher {
+    private static class KeywordSearch extends Searcher {
 
         KeywordSearch(SOAPSearchClient service, String keywords, boolean orThem,
                       int from, int max, boolean idsonly) 
         {
             super(service, getKeywordSearchMethod(), from, max);
-            args = new Object[] { keywords, new Boolean(orThem), 
-                                  new Integer(from), new Integer(max), new 
-                                  Boolean(idsonly) };
+            args = new Object[] { keywords, orThem, from, max, idsonly };
         }
 
         public void updateArgs() {
-            args[2] = new Integer(getFrom());
-            args[3] = new Integer(getMax());
+            args[2] = getFrom();
+            args[3] = getMax();
         }
     }
     

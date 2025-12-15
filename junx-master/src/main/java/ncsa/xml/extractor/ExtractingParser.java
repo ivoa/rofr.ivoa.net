@@ -110,8 +110,8 @@ public class ExtractingParser implements Extractor {
     public Reader nextNode() throws IOException {
         if (extrdr != null) {
             extrdr.close();
-            long eof = rdr.nextPauseMarker();
-            if (eof > rdr.readCount()) rdr.skip(eof - rdr.readCount());
+//            long eof = rdr.nextPauseMarker();
+//            if (eof > rdr.readCount()) rdr.skip(eof - rdr.readCount());
         }
 
         int taste = rdr.read();

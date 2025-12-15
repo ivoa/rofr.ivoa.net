@@ -62,7 +62,7 @@
 
   <dependencies>
 	  <dependency org="nvo" name="adql" rev="latest.[integration]" conf="compile->compile(*),master(*)"/>
-	  <dependency org="javax.xml.soap" name="javax.xml.soap-api" rev="1.4.0" conf="compile->compile(*),master(*)"/>
+      <dependency org="jakarta.xml.soap" name="jakarta.xml.soap-api" rev="3.0.2" conf="compile->compile(*),master(*)" />
 	  <dependency org="junit" name="junit" rev="4.12" conf="test->runtime(*),master(*)"/>
   </dependencies>
 

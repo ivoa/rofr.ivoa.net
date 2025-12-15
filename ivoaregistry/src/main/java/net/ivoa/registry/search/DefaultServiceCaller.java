@@ -8,11 +8,11 @@ import net.ivoa.registry.RegistryServiceException;
 
 import java.net.URL;
 
-import javax.xml.soap.SOAPConnection;
-import javax.xml.soap.SOAPConnectionFactory;
-import javax.xml.soap.SOAPMessage;
-import javax.xml.soap.SOAPException;
-import javax.xml.soap.MimeHeaders;
+import jakarta.xml.soap.SOAPConnection;
+import jakarta.xml.soap.SOAPConnectionFactory;
+import jakarta.xml.soap.SOAPMessage;
+import jakarta.xml.soap.SOAPException;
+import jakarta.xml.soap.MimeHeaders;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
@@ -33,8 +33,8 @@ import org.w3c.dom.DOMException;
  * message.
  */
 public class DefaultServiceCaller implements ServiceCaller {
-    URL ep = null;
-    protected SOAPConnection conn = null;
+    URL ep;
+    protected SOAPConnection conn;
 
     /**
      * the SOAP v1.1 namespace URI string
@@ -111,11 +111,6 @@ public class DefaultServiceCaller implements ServiceCaller {
      * set the service endpoint URL
      */
     public void setEndpoint(URL endpoint) { ep = endpoint; }
-
-    /**
-     * get the service endpoint URL currently in use
-     */
-    public URL getEndpoint() { return ep; }
 
     /**
      * call the SOAP service and return the content of the body the 

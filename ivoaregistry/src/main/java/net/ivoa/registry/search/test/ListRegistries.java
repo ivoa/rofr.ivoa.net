@@ -5,17 +5,14 @@
 package net.ivoa.registry.search.test;
 
 import java.io.OutputStream;
-import java.io.PrintStream;
-import java.io.Reader;
 import java.io.StringReader;
 import java.net.MalformedURLException;
+import java.net.URI;
 import java.net.URL;
-import javax.xml.parsers.DocumentBuilder;
+import java.util.Objects;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
-import javax.xml.soap.SOAPException;
-import javax.xml.transform.Result;
-import javax.xml.transform.Source;
+import jakarta.xml.soap.SOAPException;
 import javax.xml.transform.Transformer;
 import javax.xml.transform.TransformerException;
 import javax.xml.transform.TransformerFactory;
@@ -24,7 +21,6 @@ import javax.xml.transform.stream.StreamResult;
 import org.w3c.dom.DOMException;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
-import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
 import net.ivoa.registry.RegistryCommException;
@@ -38,7 +34,7 @@ import net.ivoa.registry.search.Where2DOM;
  * searchable registry.
  */
 public class ListRegistries {
-    public URL endpoint = null;
+    public URL endpoint;
 
     /**
      * construct the application to use the registry at the given URL service
@@ -50,7 +46,7 @@ public class ListRegistries {
 
     Element createWhere() {
         String adqlwhere = "where @xsi:type like '%:Registry'";
-        Where2DOM p = new Where2DOM( (Reader) new StringReader(adqlwhere));
+        Where2DOM p = new Where2DOM(new StringReader(adqlwhere));
         try {
             return p.parseWhere();
         }
@@ -85,10 +81,7 @@ public class ListRegistries {
               root = (Element) reslist.item(0);
             return root;
         }
-        catch (SOAPException ex) {
-            throw new RegistryCommException(ex);
-        }
-        catch (DOMException ex) {
+        catch (SOAPException | DOMException ex) {
             throw new RegistryCommException(ex);
         }
     }
@@ -106,7 +99,7 @@ public class ListRegistries {
         try {
             Document resdoc = 
                 DocumentBuilderFactory.newInstance().newDocumentBuilder().newDocument();
-            Element list = getList();
+            Element list;
 
             try {
                 list = (Element) resdoc.importNode(this.getList(), true);
@@ -118,8 +111,7 @@ public class ListRegistries {
 
             TransformerFactory tf = TransformerFactory.newInstance();
             Transformer printer = tf.newTransformer();
-            printer.transform(new DOMSource(resdoc), 
-                              new StreamResult(System.out));
+            printer.transform(new DOMSource(resdoc), new StreamResult(out));
         }
         catch (ParserConfigurationException ex) {
             throw new InternalError("DOM config error: " + ex.getMessage());
@@ -138,14 +130,15 @@ public class ListRegistries {
             System.exit(1);
         }
 
-        URL endpoint = null;
+        URL endpoint;
         try {
-            endpoint = new URL(args[0]);
+            endpoint = URI.create(args[0]).toURL();
         }
         catch (MalformedURLException ex) {
             System.err.println("Bad URL: " + args[0] + "(" + 
                                ex.getMessage() + ")");
             System.exit(2);
+            endpoint = null;
         }
 
         ListRegistries lr = new ListRegistries(endpoint);
@@ -159,16 +152,12 @@ public class ListRegistries {
         catch (RegistryCommException ex) {
             System.err.println("Search communication error: " + ex.getMessage());
             Exception wrapped = ex.getTargetException();
-            if (wrapped != null) {
-                wrapped.printStackTrace();
-            } else {
-                ex.printStackTrace();
-            }
+            Objects.requireNonNullElse(wrapped, ex).printStackTrace(System.err);
             System.exit(1);
         }
         catch (Exception ex) {
             System.err.println("Search failed: " + ex.getMessage());
-            ex.printStackTrace();
+            ex.printStackTrace(System.err);
             System.exit(1);
         }
         System.exit(0);

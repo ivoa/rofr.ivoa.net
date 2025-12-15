@@ -9,7 +9,7 @@ import net.ivoa.registry.RegistryServiceException;
 import java.lang.reflect.Method;
 import java.lang.reflect.InvocationTargetException;
 
-import javax.xml.soap.SOAPException;
+import jakarta.xml.soap.SOAPException;
 import org.w3c.dom.Element;
 import org.w3c.dom.DOMException;
 
@@ -75,18 +75,17 @@ abstract class Searcher {
         }
         catch (InvocationTargetException ex) {
             Throwable tex = ex.getTargetException();
-            if (tex instanceof SOAPException) 
-                throw ((SOAPException) tex);
-            else if (tex instanceof RegistryServiceException) 
-                throw ((RegistryServiceException) tex);
-            else if (tex instanceof DOMException) 
-                throw ((DOMException) tex);
-            else {
-                String name = tex.getClass().getName();
-                int dot = name.lastIndexOf(".");
-                if (dot >= 0) name = name.substring(dot+1);
-                throw new RegistryServiceException(name + ": " +
-                                                   tex.getMessage());
+            switch (tex) {
+                case SOAPException soapException -> throw soapException;
+                case RegistryServiceException registryServiceException -> throw registryServiceException;
+                case DOMException domException -> throw domException;
+                default -> {
+                    String name = tex.getClass().getName();
+                    int dot = name.lastIndexOf(".");
+                    if (dot >= 0) name = name.substring(dot + 1);
+                    throw new RegistryServiceException(name + ": " +
+                            tex.getMessage());
+                }
             }
         }
     }

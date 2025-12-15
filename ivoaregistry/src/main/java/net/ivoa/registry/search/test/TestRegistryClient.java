@@ -15,12 +15,12 @@ import net.ivoa.registry.RegistryServiceException;
 import net.ivoa.registry.RegistryAccessException;
 import net.ivoa.registry.RegistryCommException;
 
-import javax.xml.soap.MessageFactory;
-import javax.xml.soap.SOAPMessage;
-import javax.xml.soap.SOAPBody;
-import javax.xml.soap.SOAPEnvelope;
-import javax.xml.soap.SOAPException;
-import javax.xml.soap.SOAPConnection;
+import jakarta.xml.soap.MessageFactory;
+import jakarta.xml.soap.SOAPMessage;
+import jakarta.xml.soap.SOAPBody;
+import jakarta.xml.soap.SOAPEnvelope;
+import jakarta.xml.soap.SOAPException;
+import jakarta.xml.soap.SOAPConnection;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.ParserConfigurationException;
@@ -57,7 +57,9 @@ public class TestRegistryClient {
         // parse the command line
         try {
             cl.setCmdLine(args); 
-        } catch (CmdLine.UnrecognizedOptionException ex) { }
+        } catch (CmdLine.UnrecognizedOptionException ex) {
+            // ignore
+        }
 
         RegistrySearchClient client = null;
         if (cl.isSet('e')) {

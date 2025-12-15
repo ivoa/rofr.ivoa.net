@@ -145,9 +145,9 @@ public class RecordResponseProcessor {
         resume = null;
         failure = null;
         this.page = page;
-        recordInfos = new LinkedList<Properties>();
+        recordInfos = new LinkedList<>();
         ExtractingParser parser = initParser(is);
-        Reader rawrec = null;
+        Reader rawrec;
 
         // consume records in input stream.  The parser draws the input 
         // (OAI-PMH) xml data through the parser and feeds it to us via
@@ -173,7 +173,7 @@ public class RecordResponseProcessor {
         if (failure != null)
             throw failure;
 
-        while (recordInfos.size() > 0) {
+        while (!recordInfos.isEmpty()) {
             // we've got some more deleted records left to process
             consumer.consume(new HarvestedRecord(recordInfos.remove()));
             count++;

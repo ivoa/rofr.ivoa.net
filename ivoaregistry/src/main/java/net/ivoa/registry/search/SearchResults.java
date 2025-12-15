@@ -8,7 +8,7 @@ import net.ivoa.registry.RegistryServiceException;
 import net.ivoa.registry.RegistryFormatException;
 import net.ivoa.registry.RegistryCommException;
 
-import javax.xml.soap.SOAPException;
+import jakarta.xml.soap.SOAPException;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 
@@ -73,7 +73,7 @@ public abstract class SearchResults {
         return (Element) child;
     }
 
-    int retrieveNext() 
+    void retrieveNext()
          throws RegistryServiceException, RegistryFormatException, 
                 RegistryCommException
     {
@@ -92,12 +92,10 @@ public abstract class SearchResults {
         result = getFirstChildElement(result);
 
         String attval = result.getAttribute("more");
-        if (attval == null || 
-            (! attval.equalsIgnoreCase("true") && 
-             ! attval.equalsIgnoreCase("false")))
+        if (!attval.equalsIgnoreCase("true") && !attval.equalsIgnoreCase("false"))
             throw new RegistryFormatException("bad format for " +
                                               "more attribute: " + attval);
-        boolean more = Boolean.valueOf(attval).booleanValue();
+        boolean more = Boolean.parseBoolean(attval);
             
 
         try {
@@ -125,10 +123,9 @@ public abstract class SearchResults {
         else {
             buffer.addLast(result, num);
         }
-        return num;
     }
 
-    int countRecords(Element parent) throws RegistryFormatException {
+    int countRecords(Element parent) {
         count = 0;
         Node child = parent.getFirstChild();
         while (child != null) {
@@ -139,7 +136,7 @@ public abstract class SearchResults {
         return count;
     }
 
-    int retrievePrevious() 
+    void retrievePrevious()
          throws RegistryServiceException, RegistryFormatException, 
                 RegistryCommException
     {
@@ -160,13 +157,9 @@ public abstract class SearchResults {
         }
 
         String attval = result.getAttribute("more");
-        if (attval == null || 
-            (! attval.equalsIgnoreCase("true") && 
-             ! attval.equalsIgnoreCase("false")))
+        if (!attval.equalsIgnoreCase("true") && !attval.equalsIgnoreCase("false"))
             throw new RegistryFormatException("bad format for " +
                                               "more attribute: " + attval);
-        boolean more = Boolean.valueOf(attval).booleanValue();
-            
         try {
             num = Integer.parseInt(result.getAttribute("numberReturned"));
         }
@@ -188,7 +181,6 @@ public abstract class SearchResults {
         }
 
         buffer.addLast(result, num);
-        return num;
     }
 
     /**
@@ -290,9 +282,6 @@ public abstract class SearchResults {
             return previousElement();
         }
 
-        String underflow = "VOResources element has fewer records (" + bufpos +
-            ") than expected (" + bufnum + ").";
-
         if (currentRecord == null) 
             currentRecord = currentBatch.getLastChild();
         else 
@@ -310,7 +299,7 @@ public abstract class SearchResults {
         return ((Element) currentRecord);
     }
 
-    class LinkedElement {
+    static class LinkedElement {
         public Element element = null;
         public LinkedElement next = null;
         public LinkedElement prev = null;

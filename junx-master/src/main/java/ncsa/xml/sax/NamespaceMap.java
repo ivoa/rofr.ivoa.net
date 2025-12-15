@@ -40,8 +40,7 @@ public class NamespaceMap implements Namespaces, Cloneable {
 
     final int READY = 0;
     final int ADDING = 1;
-    final int REMOVING = 2;
-    private Stack history = new Stack();
+    private final Stack<Snapshot> history = new Stack<>();
     private Snapshot cur = new Snapshot();
     private int state = READY;
     private int validityDepth = 0;
@@ -86,8 +85,8 @@ public class NamespaceMap implements Namespaces, Cloneable {
     }
 
     void exitElementContext() {
-        if (validityDepth <= 0 && history.size() > 0) {
-            cur = (Snapshot)history.pop();
+        if (validityDepth <= 0 && !history.isEmpty()) {
+            cur = history.pop();
             validityDepth = cur.validityDepth;
         }
         state = READY;
@@ -151,8 +150,7 @@ public class NamespaceMap implements Namespaces, Cloneable {
      */
     public void endElement(Set<String> prefixes) {
         if (prefixes != null && cur.prefixes != null) {
-            for (String prefix : cur.prefixes) 
-                prefixes.add(prefix);
+            prefixes.addAll(cur.prefixes);
         }
         validityDepth--;
         exitElementContext();
@@ -187,7 +185,7 @@ public class NamespaceMap implements Namespaces, Cloneable {
     /**
      * return an enumeration of the currently defined prefixes
      */
-    public Enumeration prefixes() {
+    public Enumeration<?> prefixes() {
         return cur.pre2ns.propertyNames();
     }
 
@@ -203,7 +201,7 @@ public class NamespaceMap implements Namespaces, Cloneable {
     /**
      * return an enumeration of the currently defined namespaces
      */
-    public Enumeration uris() {
+    public Enumeration<?> uris() {
         return cur.ns2pre.propertyNames();
     }
 
@@ -264,7 +262,7 @@ public class NamespaceMap implements Namespaces, Cloneable {
     /**
      * return an enumeration of the namespaces for which a location is known
      */
-    public Enumeration locatedNamespaces() {
+    public Enumeration<?> locatedNamespaces() {
         return cur.ns2loc.propertyNames();
     }
 
@@ -278,9 +276,9 @@ public class NamespaceMap implements Namespaces, Cloneable {
         for(; steps > 0; steps--)
         {
             out.validityDepth--;
-            if(out.validityDepth <= 0 && out.history.size() > 0)
+            if(out.validityDepth <= 0 && !out.history.isEmpty())
             {
-                out.cur = (Snapshot)out.history.pop();
+                out.cur = out.history.pop();
                 out.validityDepth = out.cur.validityDepth;
             }
         }
@@ -303,9 +301,9 @@ public class NamespaceMap implements Namespaces, Cloneable {
      */
     public Object clone()  {
         NamespaceMap out = (NamespaceMap)clone();
-        out.history = new Stack();
-        for(Enumeration e = history.elements(); e.hasMoreElements();)
-            out.history.push( ((Snapshot)e.nextElement()).clone() );
+        out.history.clear();
+        for(Enumeration<Snapshot> e = history.elements(); e.hasMoreElements();)
+            out.history.push( (Snapshot) e.nextElement().clone() );
         out.cur = (Snapshot) cur.clone();
         return out;
     }
@@ -315,10 +313,8 @@ public class NamespaceMap implements Namespaces, Cloneable {
         public Properties pre2ns = null;
         public Properties ns2pre = null;
         public Properties ns2loc = null;
-        public HashSet<String> prefixes = null;
+        public HashSet<String> prefixes = new HashSet<>();
         public int validityDepth = 0;
-        static final String CLN = ":";
-        static final String empty = "";
 
         public Snapshot() {
             pre2ns = new Properties();
@@ -352,16 +348,14 @@ public class NamespaceMap implements Namespaces, Cloneable {
                 throw new NullPointerException("Null URI given");
             if(prefix == null) 
                 throw new NullPointerException("Null prefix given");
-            if (prefixes == null) prefixes = new HashSet();
 
             prefixes.add(prefix);
             pre2ns.setProperty(prefix, uri);
             ns2pre.setProperty(uri, prefix);
         }
 
-        public Set getPrefixes() {
-            return (prefixes == null) ? new HashSet<String>() 
-                                      : new HashSet<String>(prefixes);
+        public Set<String> getPrefixes() {
+            return new HashSet<>(prefixes);
         }
 
         public void addLocation(String namespace, String loc)

@@ -26,7 +26,7 @@ import java.util.Set;
  * member field.
  */
 public class OnDemandParserDelegate implements OnDemandParser {
-    private Hashtable attrSel = new Hashtable();
+    private final Hashtable<String, Set<String>> attrSel = new Hashtable<>();
     private int events = 0;
 
     /**
@@ -47,7 +47,6 @@ public class OnDemandParserDelegate implements OnDemandParser {
      * @param events    the OR-ed set of events to enable
      */
     public OnDemandParserDelegate(int events) {
-        attrSel = new Hashtable();
         this.events = 0;
         enableEvents(events);
     }
@@ -75,8 +74,8 @@ public class OnDemandParserDelegate implements OnDemandParser {
      * @param elname   the qualified or local element name
      * @return Set  a set of Strings representing attribute names
      */
-    public final Set getAttrsToLoad(String elname) {
-        return (Set)attrSel.get(elname);
+    public final Set<String> getAttrsToLoad(String elname) {
+        return attrSel.get(elname);
     }
 
     /**
@@ -183,7 +182,7 @@ public class OnDemandParserDelegate implements OnDemandParser {
      * an effect when element events are enabled.
      * @param yes   if true, this event will be enabled; otherwise it will 
      *                 be disabled.
-     * @see OnDemandParser#loadAttributes(Set)
+     * @see OnDemandParser#loadAttributes(String, Set) (Set)
      */
     public void enableAttributes(boolean yes) {
         setEvents(ATTRIBUTES, yes);
@@ -197,15 +196,15 @@ public class OnDemandParserDelegate implements OnDemandParser {
      * <code>elname</code> first with the qualified name and then with the 
      * local name.  If <code>elname</code> is null or empty, the attribute 
      * selection applies to all, otherwise-unspecified elements.
-     * @param elName  the qualified or local name for the element.  If 
+     * @param elname  the qualified or local name for the element.  If
      *                  null or empty, the attribute selection applies to 
      *                  all, otherwise-unspecified elements.
-     * @param attrs   the attributes given as a Set of Strings.  A null 
+     * @param attnames   the attributes given as a Set of Strings.  A null
      *                  value resets the selection such that 
      *                  all attributes will be loaded.  An empty set means
      *                  than no attributes for this element should be loaded.
      */
-    public void loadAttributes(String elname, Set attnames) {
+    public void loadAttributes(String elname, Set<String> attnames) {
         if(elname == null)
             elname = "";
         if(attnames == null)
@@ -221,9 +220,9 @@ public class OnDemandParserDelegate implements OnDemandParser {
      *                  interested in.  null is returned if all attributes
      *                  are wanted.
      */
-    public Set attributesFor(String name) {
+    public Set<String> attributesFor(String name) {
         if(name == null) name = "";
-        return (Set) attrSel.get(name);
+        return (Set<String>) attrSel.get(name);
     }
 
     /**

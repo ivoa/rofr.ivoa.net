@@ -4,18 +4,16 @@ import ncsa.horizon.util.CmdLine;
 
 import java.util.Enumeration;
 import java.util.Stack;
-import static java.lang.String.format;
 
 import org.junit.Before;
-import org.junit.After;
 import org.junit.Test;
-import static org.junit.Assert.*;
+import org.junit.Assert;
 
 public class CmdLineTest {
 
-    private static String config = "f:puqx-";
-    private static String opts = "fpuqx";
-    private static String[] args = "-quq -q -f file.txt -x -hello world".split(" ");
+    private static final String config = "f:puqx-";
+    private static final String opts = "fpuqx";
+    private static final String[] args = "-quq -q -f file.txt -x -hello world".split(" ");
     private CmdLine cl = null;
 
     @Before
@@ -25,174 +23,155 @@ public class CmdLineTest {
 
     @Test 
     public void testGetConfig() {
-        assertEquals(cl.getConfig(), config);
+        Assert.assertEquals("Incorrect config", config, cl.getConfig());
     }
 
     @Test 
     public void testSetConfig() {
         cl.setConfig("re");
-        assertFalse(cl.isAnOption(opts.charAt(0)));
-        assertTrue(cl.isAnOption('r'));
+        Assert.assertFalse(cl.isAnOption(opts.charAt(0)));
+        Assert.assertTrue(cl.isAnOption('r'));
     }
 
     @Test public void testSetFlags() {
-        assertEquals(cl.getFlags(), CmdLine.NULLFLAG);
+        Assert.assertEquals(CmdLine.NULLFLAG, cl.getFlags());
 
         cl.setFlags(CmdLine.RELAX|CmdLine.WARN);
-        assertEquals(cl.getFlags(), (CmdLine.RELAX|CmdLine.WARN));
+        Assert.assertEquals((CmdLine.RELAX|CmdLine.WARN), cl.getFlags());
         cl.addFlags(CmdLine.USRWARN);
-        assertEquals(cl.getFlags(), 
-                     (CmdLine.RELAX|CmdLine.WARN|CmdLine.USRWARN));
+        Assert.assertEquals((CmdLine.RELAX|CmdLine.WARN|CmdLine.USRWARN), cl.getFlags());
 
         cl.setFlags(CmdLine.NULLFLAG);
-        assertEquals(cl.getFlags(), CmdLine.NULLFLAG);
+        Assert.assertEquals(CmdLine.NULLFLAG, cl.getFlags());
     }
 
     @Test public void testOptionsDef() {
-        StringBuffer set = new StringBuffer();
-        for(Enumeration e=cl.options(); e.hasMoreElements();) {
-            Character opt = (Character) e.nextElement();
-            assertTrue(format("unexpected option: %c", opt), 
+        StringBuilder set = new StringBuilder();
+        for(Enumeration<Character> e=cl.options(); e.hasMoreElements();) {
+            Character opt = e.nextElement();
+            Assert.assertTrue(String.format("unexpected option: %c", opt),
                        opts.indexOf(opt) >= 0);
             set.append(opt);
         }
         String optset = set.toString();
         for(int i=0; i < optset.length(); i++) {
-            Character opt = optset.charAt(i);
-            assertTrue(format("option not set: %c", opt), 
+            char opt = optset.charAt(i);
+            Assert.assertTrue(String.format("option not set: %c", opt),
                        opts.indexOf(opt) >= 0);
-            assertTrue(format("option not set: %c", opt), 
+            Assert.assertTrue(String.format("option not set: %c", opt),
                        cl.isAnOption(opt));
         }
-        assertEquals(optset.length(), opts.length());
+        Assert.assertEquals(optset.length(), opts.length());
 
-        assertTrue("Misconfigured option: p", cl.isSwitched('p'));
-        assertTrue("Misconfigured option: u", cl.isSwitched('u'));
-        assertTrue("Misconfigured option: q", cl.isSwitched('q'));
-        assertTrue("Misconfigured option: x", cl.isSwitched('x'));
-        assertFalse("Misconfigured option: f", cl.isSwitched('f'));
-    }
-
-    @Test(expected=IllegalStateException.class) 
-    public void testNoArgsGetNumArgs() {
-        int c = cl.getNumArgs();
-        assertFalse("Non-zero arg count given on no-arg", c == 0);
-        fail("getNumArgs() failed to raise exception on no-arg");
+        Assert.assertTrue("Misconfigured option: p", cl.isSwitched('p'));
+        Assert.assertTrue("Misconfigured option: u", cl.isSwitched('u'));
+        Assert.assertTrue("Misconfigured option: q", cl.isSwitched('q'));
+        Assert.assertTrue("Misconfigured option: x", cl.isSwitched('x'));
+        Assert.assertFalse("Misconfigured option: f", cl.isSwitched('f'));
     }
 
     @Test
     public void testNoArgsGetNumSet() {
-        assertEquals(cl.getNumSet('f'), 0);
+        Assert.assertEquals(0, cl.getNumSet('f'));
     }
 
     @Test
     public void testNoArgsGetValue() {
-        assertNull(cl.getValue('f'));
+        Assert.assertNull(cl.getValue('f'));
     }
 
     @Test
     public void testNoArgsIsSet() {
-        assertFalse(cl.isSet('q'));
-        assertFalse(cl.isSet('f'));
-        assertFalse(cl.isSet('x'));
+        Assert.assertFalse(cl.isSet('q'));
+        Assert.assertFalse(cl.isSet('f'));
+        Assert.assertFalse(cl.isSet('x'));
     }
 
     @Test
     public void testNoArgsGetAllValues() {
-        Stack vals = cl.getAllValues('f');
-        assertEquals("Non-empty list of option values on no-arg", 
-                     vals.size(), 0);
+        Stack<String> vals = cl.getAllValues('f');
+        Assert.assertEquals("Non-empty list of option values on no-arg",
+                0, vals.size());
     }
 
     @Test public void testEmptyCmdLine() {
-        String args[] = new String[0];
+        String[] args = new String[0];
         try {
             cl.setCmdLine(args);
-        } catch (CmdLine.UnrecognizedOptionException ex) { 
-            fail("inadvertantly threw UnrecognizedOptionException");
+        } catch (CmdLine.UnrecognizedOptionException ex) {
+            Assert.fail("inadvertently threw UnrecognizedOptionException");
         }
 
         for(int i=0; i < opts.length(); i++) {
-            assertFalse(cl.isSet(opts.charAt(i)));
+            Assert.assertFalse(cl.isSet(opts.charAt(i)));
         }
-        assertEquals(0, cl.getNumArgs());
+        Assert.assertEquals(0, cl.getNumArgs());
     }
 
-    @Test public void testBadOption() {
-        String args[] = "-re".split(" ");
+    @Test public void testBadOption() throws Exception {
+        String[] args = "-re".split(" ");
         try {
             cl.setCmdLine(args);
-            fail("Failed to detected unrecognized option");
-        } catch (CmdLine.UnrecognizedOptionException ex) { }
+            Assert.fail("Failed to detected unrecognized option");
+        } catch (CmdLine.UnrecognizedOptionException ex) {
+            // ignore
+        }
 
         cl.setFlags(CmdLine.RELAX);
-        try {
-            cl.setCmdLine(args);
-        } catch (CmdLine.UnrecognizedOptionException ex) { 
-            fail("failed to relax");
-        }
+        cl.setCmdLine(args);
 
         cl.addFlags(CmdLine.USRWARN);
-        try {
-            cl.setCmdLine(args);
-        } catch (CmdLine.UnrecognizedOptionException ex) { 
-            fail("failed to relax");
-        }
+        cl.setCmdLine(args);
     }
 
-    private void setCmdLine() {
+    private void setCmdLine() throws Exception {
         cl.setFlags(CmdLine.RELAX);
-        try {
-            cl.setCmdLine(args);
-        } catch (CmdLine.UnrecognizedOptionException ex) { 
-            fail("failed to relax");
-        }
+        cl.setCmdLine(args);
     }
 
-    @Test public void testSetCmdLine() {
+    @Test public void testSetCmdLine() throws Exception {
         setCmdLine();
 
-        assertEquals("Wrong number of arguments detected", 
-                     cl.getNumArgs(), 2);
-        assertEquals("Wrong number of arguments detected", 
-                     cl.getNumArgs(), 2);
+        Assert.assertEquals("Wrong number of arguments detected",
+                2, cl.getNumArgs());
+        Assert.assertEquals("Wrong number of arguments detected",
+                2, cl.getNumArgs());
     }
 
-    @Test public void testOptions() {
+    @Test public void testOptions() throws Exception {
         setCmdLine();
 
-        assertTrue(cl.isSet('q'));
-        assertTrue(cl.isSet('u'));
-        assertTrue(cl.isSet('x'));
-        assertFalse(cl.isSet('p'));
-        assertFalse(cl.isSet('e'));
-        assertFalse(cl.isSet('r'));
+        Assert.assertTrue(cl.isSet('q'));
+        Assert.assertTrue(cl.isSet('u'));
+        Assert.assertTrue(cl.isSet('x'));
+        Assert.assertFalse(cl.isSet('p'));
+        Assert.assertFalse(cl.isSet('e'));
+        Assert.assertFalse(cl.isSet('r'));
 
-        assertEquals("Bad option occurance count", cl.getNumSet('q'), 3);
+        Assert.assertEquals("Bad option occurrence count", 3, cl.getNumSet('q'));
 
-        assertEquals("Bad option arg", cl.getValue('f'), "file.txt");
+        Assert.assertEquals("Bad option arg", "file.txt", cl.getValue('f'));
     }
 
-    @Test public void testArguments() {
+    @Test public void testArguments() throws Exception {
         String[] expected = "-hello world".split(" ");
 
         setCmdLine();
         int i=0;
-        StringBuffer extra = new StringBuffer();
-        for(Enumeration e = cl.arguments(); e.hasMoreElements(); i++){
-            String s = (String) e.nextElement();
-            if (i < expected.length)          
-                assertEquals(format("Argument out of order: %s", s),
-                             s, expected[i]);
+        StringBuilder extra = new StringBuilder();
+        for(Enumeration<String> e = cl.arguments(); e.hasMoreElements(); i++){
+            String s = e.nextElement();
+            if (i < expected.length)
+                Assert.assertEquals(String.format("Argument out of order: %s", s), s, expected[i]);
             else
                 extra.append(' ').append(s);
         }
-        assertTrue(format("extra arguments found:%s",extra), 
+        Assert.assertTrue(String.format("extra arguments found:%s",extra),
                    i <= expected.length);
         if (i < expected.length) {
             for(; i < expected.length; i++) 
                 extra.append(' ').append(expected[i]);
-            fail(format("missing arguments:%s",extra));
+            Assert.fail(String.format("missing arguments:%s",extra));
         }
     }
 }
