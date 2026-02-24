@@ -90,7 +90,7 @@ OAI interface.</em></font>
 <span style="visibility: hidden">XXXXX</span>
 <input type="reset" value="cancel" disabled="1" id="cancel"/>
 <span style="visibility: hidden">XXXXX</span>
-<label><input type="checkbox" name="builtinSchemas" value="y" checked="checked">Use built-in schemas (leave unchecked to register)</label>
+<label><input type="checkbox" name="builtinSchemas" value="y" checked="checked">Use built-in schemas (leave checked to register)</label>
 
 </form>
 
